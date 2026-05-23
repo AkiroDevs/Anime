@@ -1,5 +1,5 @@
 -- LocalScript dentro de StarterGui
--- YTDEVS PROJECT v4 - SISTEMA CCTV & TOUCH DEFINITIVO
+-- YTDEVS PROJECT v4 - HUB UNIVERSAL (CCTV, ESP, ANTI-LAG, NOCLIP, LAG SWITCH)
 
 local UserInputService = game:GetService("UserInputService")
 local Players = game:GetService("Players")
@@ -41,7 +41,7 @@ titleBar.TextSize = 14
 titleBar.TextXAlignment = Enum.TextXAlignment.Left
 titleBar.Parent = mainFrame
 
--- ========== NAVEGAÇÃO DE ABAS ==========
+-- ========== NAVEGAÇÃO DE ABAS MIGRADA (4 ABAS AGORA) ==========
 local tabSelectionFrame = Instance.new("Frame")
 tabSelectionFrame.Size = UDim2.new(1, 0, 0, 30)
 tabSelectionFrame.Position = UDim2.new(0, 0, 0, 35)
@@ -65,13 +65,12 @@ local primeiraAba = true
 
 local function novaAba(nome)
 	local btnTab = Instance.new("TextButton")
-	-- Reduzindo o tamanho para caberem 3 abas agora
-	btnTab.Size = UDim2.new(0, 80, 1, 0)
+	btnTab.Size = UDim2.new(0, 60, 1, 0) -- Reduzido para acomodar 4 abas perfeitamente
 	btnTab.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
 	btnTab.Text = nome
 	btnTab.TextColor3 = Color3.new(1, 1, 1)
 	btnTab.Font = Enum.Font.GothamBold
-	btnTab.TextSize = 11
+	btnTab.TextSize = 10
 	btnTab.Parent = tabSelectionFrame
 
 	local scroll = Instance.new("ScrollingFrame")
@@ -111,6 +110,7 @@ end
 
 local abaPrincipal = novaAba("Principal")
 local abaCameras = novaAba("Câmeras")
+local abaEspeciais = novaAba("Especiais")
 local abaAjustes = novaAba("Ajustes")
 
 local function criarBotaoFeed(abaScroll, nome, callback)
@@ -122,7 +122,7 @@ local function criarBotaoFeed(abaScroll, nome, callback)
 	btn.Font = Enum.Font.GothamBold
 	btn.TextSize = 13
 	btn.Parent = abaScroll
-	btn.MouseButton1Click:Connect(callback)
+	if callback then btn.MouseButton1Click:Connect(callback) end
 	return btn
 end
 
@@ -161,9 +161,7 @@ minimizadoIcon.Visible = false
 minimizadoIcon.Parent = screenGui
 minimizadoIcon.Active = true
 
-local iconCorner = Instance.new("UICorner")
-iconCorner.CornerRadius = UDim.new(1, 0)
-iconCorner.Parent = minimizadoIcon
+Instance.new("UICorner", minimizadoIcon).CornerRadius = UDim.new(1, 0)
 
 -- ========== SISTEMA DE ARRASTE DOS MENUS ==========
 local function aplicarArrasto(alvo, ativador)
@@ -203,6 +201,8 @@ local state = {
 	freecam = false,
 	esp = false,
 	viewingCam = false,
+	noclip = false,
+	lagSwitch = false,
 	speed = 2,
 	yaw = 0,
 	pitch = 0,
@@ -213,12 +213,10 @@ local state = {
 local freecamGui = nil
 local joyDragging = false
 local currentTouch = nil
-
--- Câmeras de segurança (Armazena os CFrames)
 local cctvSlots = {nil, nil, nil, nil, nil, nil}
 local currentSlot = 1
 
--- ========== ANALÓGICO DO DRONE (CORREÇÃO FINAL DE TOUCH) ==========
+-- ========== ANALÓGICO DO DRONE ==========
 local function criarFreecamControles()
 	if freecamGui then freecamGui:Destroy() end
 	freecamGui = Instance.new("ScreenGui")
@@ -231,7 +229,7 @@ local function criarFreecamControles()
 	movBase.Position = UDim2.new(0, 30, 1, -170)
 	movBase.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
 	movBase.BackgroundTransparency = 0.6
-	movBase.Active = true -- Importante para capturar touch nativo
+	movBase.Active = true
 	Instance.new("UICorner", movBase).CornerRadius = UDim.new(1, 0)
 	movBase.Parent = freecamGui
 
@@ -265,7 +263,6 @@ local function criarFreecamControles()
 	btnDescer.Parent = freecamGui
 	Instance.new("UICorner", btnDescer).CornerRadius = UDim.new(0, 8)
 
-	-- Analógico isolado blindado
 	movBase.InputBegan:Connect(function(input)
 		if (input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseButton1) and not joyDragging then
 			joyDragging = true
@@ -295,7 +292,7 @@ local function criarFreecamControles()
 	end
 	
 	UserInputService.InputEnded:Connect(resetAnalogico)
-	movBase.InputEnded:Connect(resetAnalogico) -- Redundância de segurança
+	movBase.InputEnded:Connect(resetAnalogico)
 
 	btnSubir.InputBegan:Connect(function() state.verticalDir = 1 end)
 	btnSubir.InputEnded:Connect(function() state.verticalDir = 0 end)
@@ -303,11 +300,10 @@ local function criarFreecamControles()
 	btnDescer.InputEnded:Connect(function() state.verticalDir = 0 end)
 end
 
--- ========== CONTROLE DE VISÃO DA CÂMERA LIVRE ==========
+-- ========== CAPTURA ROTAÇÃO CÂMERA DRONE ==========
 UserInputService.TouchMoved:Connect(function(touch, gameProcessed)
-	if not state.freecam then return end
-	if gameProcessed then return end -- Se tocou em UI (Botão), não gira
-	if joyDragging and touch == currentTouch then return end -- Ignora o dedo do analógico
+	if not state.freecam or gameProcessed then return end
+	if joyDragging and touch == currentTouch then return end
 
 	local sensibilidade = 0.008
 	state.yaw = state.yaw - (touch.Delta.X * sensibilidade)
@@ -318,7 +314,6 @@ end)
 RunService.RenderStepped:Connect(function(dt)
 	if state.freecam then
 		camera.CameraType = Enum.CameraType.Scriptable
-
 		local rotationCF = CFrame.Angles(0, state.yaw, 0) * CFrame.Angles(state.pitch, 0, 0)
 		local forward = rotationCF.LookVector
 		local right = rotationCF.RightVector
@@ -334,7 +329,36 @@ RunService.RenderStepped:Connect(function(dt)
 	end
 end)
 
--- ========== SISTEMA ESP ==========
+-- ========== EXECUÇÃO EM LOOP DO NOCLIP ENGENHARIA ==========
+RunService.Stepped:Connect(function()
+	if state.noclip and player.Character then
+		for _, part in pairs(player.Character:GetDescendants()) do
+			if part:IsA("BasePart") then
+				part.CanCollide = false
+			end
+		end
+	end
+end)
+
+-- ========== EXECUÇÃO DO SIMULADOR DE LATÊNCIA (LAG SWITCH) ==========
+local lagConnection = nil
+local function atualizarLagSwitch()
+	if state.lagSwitch then
+		-- Captura a rede local e impede o envio de pacotes de replicação física congelando o mecanismo
+		lagConnection = RunService.Heartbeat:Connect(function()
+			if player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
+				player.Character.HumanoidRootPart.Velocity = Vector3.zero
+				player.Character.HumanoidRootPart.RotVelocity = Vector3.zero
+			end
+		end)
+		settings().Network.IncomingReplicationLag = 1000 -- Joga a latência local simulada no limite máximo
+	else
+		if lagConnection then lagConnection:Disconnect(); lagConnection = nil end
+		settings().Network.IncomingReplicationLag = 0 -- Restaura a conexão padrão estável instantaneamente
+	end
+end
+
+-- ========== SISTEMA ESP ESTÁVEL ==========
 local espFolder = Instance.new("Folder", screenGui)
 espFolder.Name = "ESP_Container"
 
@@ -406,7 +430,6 @@ local function alternarVisibilidadeESP()
 end
 
 -- ========== ACOPLAMENTO ABA PRINCIPAL ==========
-
 local btnFreecam
 local function desligarFreecam()
 	state.freecam = false
@@ -420,8 +443,7 @@ local function desligarFreecam()
 end
 
 local function alternarFreecam()
-	if state.viewingCam then return end -- Evita conflito se estiver nas câmeras
-	
+	if state.viewingCam then return end
 	state.freecam = not state.freecam
 	if state.freecam then
 		btnFreecam.BackgroundColor3 = Color3.fromRGB(100, 180, 100)
@@ -452,7 +474,6 @@ btnFreecam = criarBotaoFeed(abaPrincipal, "Freecam", alternarFreecam)
 btnESP = criarBotaoFeed(abaPrincipal, "Ativar ESP", alternarESP)
 
 -- ========== ACOPLAMENTO ABA CÂMERAS (CCTV) ==========
-
 local btnSlot = criarBotaoFeed(abaCameras, "Slot Selecionado: 1", nil)
 btnSlot.MouseButton1Click:Connect(function()
 	currentSlot = currentSlot + 1
@@ -481,6 +502,59 @@ criarBotaoFeed(abaCameras, "Sair das Câmeras", function()
 	end
 end)
 
+-- ========== ACOPLAMENTO ABA ESPECIAIS (NOVAS FUNÇÕES) ==========
+
+local btnNoclip
+local function alternarNoclip()
+	state.noclip = not state.noclip
+	if state.noclip then
+		btnNoclip.BackgroundColor3 = Color3.fromRGB(100, 180, 100)
+		btnNoclip.Text = "Noclip: ATIVADO"
+	else
+		btnNoclip.BackgroundColor3 = Color3.fromRGB(70, 70, 70)
+		btnNoclip.Text = "Noclip: DESATIVADO"
+	end
+end
+btnNoclip = criarBotaoFeed(abaEspeciais, "Noclip: DESATIVADO", alternarNoclip)
+
+local btnLag
+local function alternarLag()
+	state.lagSwitch = not state.lagSwitch
+	if state.lagSwitch then
+		btnLag.BackgroundColor3 = Color3.fromRGB(180, 130, 50)
+		btnLag.Text = "Lag Simulador: LIGADO"
+	else
+		btnLag.BackgroundColor3 = Color3.fromRGB(70, 70, 70)
+		btnLag.Text = "Lag Simulador: DESLIGADO"
+	end
+	atualizarLagSwitch()
+end
+btnLag = criarBotaoFeed(abaEspeciais, "Lag Simulador: DESLIGADO", alternarLag)
+
+criarBotaoFeed(abaEspeciais, "Anti-Lag Extremo", function(self)
+	-- Varre o workspace aplicando otimização cirúrgica de propriedades locais
+	for _, obj in pairs(workspace:GetDescendants()) do
+		if obj:IsA("BasePart") then
+			obj.Material = Enum.Material.SmoothPlastic
+			obj.CastShadow = false
+		elseif obj:IsA("Decal") or obj:IsA("Texture") then
+			obj:Destroy()
+		elseif obj:IsA("ParticleEmitter") or obj:IsA("Trail") or obj:IsA("Smoke") or obj:IsA("Fire") then
+			obj.Enabled = false
+		elseif obj:IsA("Light") then
+			obj.Shadows = false
+		end
+	end
+	-- Altera as propriedades de renderização de iluminação global
+	local lighting = game:GetService("Lighting")
+	lighting.GlobalShadows = false
+	lighting.FogEnd = 9e9
+	
+	pcall(function()
+		settings().Rendering.QualityLevel = Enum.QualityLevel.Level01
+	end)
+end)
+
 -- ========== ABA DE AJUSTES ==========
 criarBotaoFeed(abaAjustes, "Velocidade Drone: +", function()
 	state.speed = math.clamp(state.speed + 0.5, 0.5, 6)
@@ -505,6 +579,9 @@ btnFechar.MouseButton1Click:Connect(function()
 	state.freecam = false
 	state.esp = false
 	state.viewingCam = false
+	state.noclip = false
+	state.lagSwitch = false
+	atualizarLagSwitch()
 	espFolder:ClearAllChildren()
 	camera.CameraType = Enum.CameraType.Custom
 	if freecamGui then freecamGui:Destroy() end

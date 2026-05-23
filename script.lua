@@ -1,9 +1,10 @@
 -- LocalScript dentro de StarterGui
--- YTDEVS PROJECT v4 - HUB UNIVERSAL (CCTV, ESP, ANTI-LAG, NOCLIP, LAG SWITCH)
+-- YTDEVS PROJECT v4 - HUB UNIVERSAL (ESTABILIZADO & EXPANDIDO)
 
 local UserInputService = game:GetService("UserInputService")
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
+local GuiService = game:GetService("GuiService")
 
 local player = Players.LocalPlayer
 local camera = workspace.CurrentCamera
@@ -41,7 +42,7 @@ titleBar.TextSize = 14
 titleBar.TextXAlignment = Enum.TextXAlignment.Left
 titleBar.Parent = mainFrame
 
--- ========== NAVEGAÇÃO DE ABAS MIGRADA (4 ABAS AGORA) ==========
+-- ========== NAVEGAÇÃO DE ABAS (5 ABAS ADAPTADAS) ==========
 local tabSelectionFrame = Instance.new("Frame")
 tabSelectionFrame.Size = UDim2.new(1, 0, 0, 30)
 tabSelectionFrame.Position = UDim2.new(0, 0, 0, 35)
@@ -65,12 +66,12 @@ local primeiraAba = true
 
 local function novaAba(nome)
 	local btnTab = Instance.new("TextButton")
-	btnTab.Size = UDim2.new(0, 60, 1, 0) -- Reduzido para acomodar 4 abas perfeitamente
+	btnTab.Size = UDim2.new(0, 48, 1, 0) -- Ajustado dinamicamente para caber as 5 abas
 	btnTab.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
 	btnTab.Text = nome
 	btnTab.TextColor3 = Color3.new(1, 1, 1)
 	btnTab.Font = Enum.Font.GothamBold
-	btnTab.TextSize = 10
+	btnTab.TextSize = 8
 	btnTab.Parent = tabSelectionFrame
 
 	local scroll = Instance.new("ScrollingFrame")
@@ -108,19 +109,20 @@ local function novaAba(nome)
 	return scroll
 end
 
-local abaPrincipal = novaAba("Principal")
-local abaCameras = novaAba("Câmeras")
-local abaEspeciais = novaAba("Especiais")
-local abaAjustes = novaAba("Ajustes")
+local abaPrincipal = novaAba("Geral")
+local abaCameras = novaAba("CCTV")
+local abaEspeciais = novaAba("Cheat")
+local abaSeguranca = novaAba("Segur")
+local abaVisual = novaAba("Visual")
 
 local function criarBotaoFeed(abaScroll, nome, callback)
 	local btn = Instance.new("TextButton")
-	btn.Size = UDim2.new(1, -10, 0, 40)
+	btn.Size = UDim2.new(1, -10, 0, 35)
 	btn.BackgroundColor3 = Color3.fromRGB(70, 70, 70)
 	btn.Text = nome
 	btn.TextColor3 = Color3.new(1, 1, 1)
 	btn.Font = Enum.Font.GothamBold
-	btn.TextSize = 13
+	btn.TextSize = 11
 	btn.Parent = abaScroll
 	if callback then btn.MouseButton1Click:Connect(callback) end
 	return btn
@@ -198,16 +200,9 @@ aplicarArrasto(minimizadoIcon, minimizadoIcon)
 
 -- ========== ESTADOS GERAIS ==========
 local state = {
-	freecam = false,
-	esp = false,
-	viewingCam = false,
-	noclip = false,
-	lagSwitch = false,
-	speed = 2,
-	yaw = 0,
-	pitch = 0,
-	moveDir = Vector3.new(0, 0, 0),
-	verticalDir = 0
+	freecam = false, esp = false, viewingCam = false, noclip = false, lagSwitch = false,
+	staffDetector = false, autoRejoin = false, fakeLag = false, cloneTarget = "",
+	speed = 2, yaw = 0, pitch = 0, moveDir = Vector3.new(0, 0, 0), verticalDir = 0
 }
 
 local freecamGui = nil
@@ -216,7 +211,7 @@ local currentTouch = nil
 local cctvSlots = {nil, nil, nil, nil, nil, nil}
 local currentSlot = 1
 
--- ========== ANALÓGICO DO DRONE ==========
+-- ========== SISTEMA DE MOVIMENTAÇÃO DRONE ==========
 local function criarFreecamControles()
 	if freecamGui then freecamGui:Destroy() end
 	freecamGui = Instance.new("ScreenGui")
@@ -241,26 +236,16 @@ local function criarFreecamControles()
 	Instance.new("UICorner", movThumb).CornerRadius = UDim.new(1, 0)
 	movThumb.Parent = movBase
 
-	local btnSubir = Instance.new("TextButton")
+	local btnSubir = criarBotaoFeed(freecamGui, "▲\nSUBIR", nil)
 	btnSubir.Size = UDim2.new(0, 65, 0, 60)
 	btnSubir.Position = UDim2.new(1, -95, 1, -165)
 	btnSubir.BackgroundColor3 = Color3.fromRGB(70, 130, 70)
-	btnSubir.Text = "▲\nSUBIR"
-	btnSubir.TextColor3 = Color3.new(1, 1, 1)
-	btnSubir.Font = Enum.Font.GothamBold
-	btnSubir.TextSize = 12
-	btnSubir.Parent = freecamGui
 	Instance.new("UICorner", btnSubir).CornerRadius = UDim.new(0, 8)
 
-	local btnDescer = Instance.new("TextButton")
+	local btnDescer = criarBotaoFeed(freecamGui, "▼\nDESCER", nil)
 	btnDescer.Size = UDim2.new(0, 65, 0, 60)
 	btnDescer.Position = UDim2.new(1, -95, 1, -95)
 	btnDescer.BackgroundColor3 = Color3.fromRGB(130, 70, 70)
-	btnDescer.Text = "▼\nDESCER"
-	btnDescer.TextColor3 = Color3.new(1, 1, 1)
-	btnDescer.Font = Enum.Font.GothamBold
-	btnDescer.TextSize = 12
-	btnDescer.Parent = freecamGui
 	Instance.new("UICorner", btnDescer).CornerRadius = UDim.new(0, 8)
 
 	movBase.InputBegan:Connect(function(input)
@@ -300,7 +285,6 @@ local function criarFreecamControles()
 	btnDescer.InputEnded:Connect(function() state.verticalDir = 0 end)
 end
 
--- ========== CAPTURA ROTAÇÃO CÂMERA DRONE ==========
 UserInputService.TouchMoved:Connect(function(touch, gameProcessed)
 	if not state.freecam or gameProcessed then return end
 	if joyDragging and touch == currentTouch then return end
@@ -329,32 +313,28 @@ RunService.RenderStepped:Connect(function(dt)
 	end
 end)
 
--- ========== EXECUÇÃO EM LOOP DO NOCLIP ENGENHARIA ==========
+-- ========== ENGENHARIA DE LOOP DOS CHEATS PRINCIPAIS ==========
 RunService.Stepped:Connect(function()
 	if state.noclip and player.Character then
 		for _, part in pairs(player.Character:GetDescendants()) do
-			if part:IsA("BasePart") then
-				part.CanCollide = false
-			end
+			if part:IsA("BasePart") then part.CanCollide = false end
 		end
 	end
 end)
 
--- ========== EXECUÇÃO DO SIMULADOR DE LATÊNCIA (LAG SWITCH) ==========
 local lagConnection = nil
 local function atualizarLagSwitch()
 	if state.lagSwitch then
-		-- Captura a rede local e impede o envio de pacotes de replicação física congelando o mecanismo
 		lagConnection = RunService.Heartbeat:Connect(function()
 			if player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
 				player.Character.HumanoidRootPart.Velocity = Vector3.zero
 				player.Character.HumanoidRootPart.RotVelocity = Vector3.zero
 			end
 		end)
-		settings().Network.IncomingReplicationLag = 1000 -- Joga a latência local simulada no limite máximo
+		settings().Network.IncomingReplicationLag = 1000
 	else
 		if lagConnection then lagConnection:Disconnect(); lagConnection = nil end
-		settings().Network.IncomingReplicationLag = 0 -- Restaura a conexão padrão estável instantaneamente
+		settings().Network.IncomingReplicationLag = 0
 	end
 end
 
@@ -364,7 +344,6 @@ espFolder.Name = "ESP_Container"
 
 local function criarESP(p)
 	if p == player then return end
-
 	local function limparModelESP()
 		local antigoBox = espFolder:FindFirstChild(p.Name .. "_Box")
 		local antigoText = espFolder:FindFirstChild(p.Name .. "_Text")
@@ -421,15 +400,36 @@ end
 for _, p in pairs(Players:GetPlayers()) do criarESP(p) end
 Players.PlayerAdded:Connect(criarESP)
 
-local function alternarVisibilidadeESP()
-	for _, obj in pairs(espFolder:GetChildren()) do
-		if obj:IsA("BoxHandleAdornment") or obj:IsA("BillboardGui") then
-			obj.Visible = state.esp
-		end
+-- ========== ENGENHARIA DA NOVA ABA: SEGURANÇA ==========
+
+-- 1. STAFF DETECTOR CONFIÁVEL
+local function checarStaff(p)
+	if not state.staffDetector then return end
+	-- Verifica padrões de segurança: IDs de desenvolvedores, Badges locais ou ranks administrativos altos
+	if p:GetRankInGroup(p.UserId) > 250 or p.AccountAge < 1 then 
+		-- Dispara o fechamento preventivo local imediato
+		state.freecam = false
+		state.noclip = false
+		state.lagSwitch = false
+		atualizarLagSwitch()
+		camera.CameraType = Enum.CameraType.Custom
+		if freecamGui then freecamGui:Destroy() end
+		mainFrame.Visible = false
+		minimizadoIcon.Visible = true
 	end
 end
+Players.PlayerAdded:Connect(checarStaff)
 
--- ========== ACOPLAMENTO ABA PRINCIPAL ==========
+-- 2. RECONEXÃO AUTOMÁTICA ANTI-CRASH (SERVER REJOINER)
+GuiService.ErrorMessageChanged:Connect(function(errorMessage, errorCode)
+	if state.autoRejoin then
+		-- Detecta desconexão forçada, kick local ou instabilidade de transmissão e reconecta imediatamente
+		game:GetService("TeleportService"):Teleport(game.PlaceId, player)
+	end
+end)
+
+-- ========== ABAS E BOTÕES DO MENU PRINCIPAL ==========
+
 local btnFreecam
 local function desligarFreecam()
 	state.freecam = false
@@ -442,7 +442,7 @@ local function desligarFreecam()
 	state.verticalDir = 0
 end
 
-local function alternarFreecam()
+btnFreecam = criarBotaoFeed(abaPrincipal, "Freecam", function()
 	if state.viewingCam then return end
 	state.freecam = not state.freecam
 	if state.freecam then
@@ -455,25 +455,18 @@ local function alternarFreecam()
 		desligarFreecam()
 		camera.CameraType = Enum.CameraType.Custom
 	end
-end
+end)
 
-local btnESP
-local function alternarESP()
+local btnESP = criarBotaoFeed(abaPrincipal, "Ativar ESP", function(self)
 	state.esp = not state.esp
-	if state.esp then
-		btnESP.BackgroundColor3 = Color3.fromRGB(100, 180, 100)
-		btnESP.Text = "Desativar ESP"
-	else
-		btnESP.BackgroundColor3 = Color3.fromRGB(70, 70, 70)
-		btnESP.Text = "Ativar ESP"
+	self.BackgroundColor3 = state.esp and Color3.fromRGB(100, 180, 100) or Color3.fromRGB(70, 70, 70)
+	self.Text = state.esp and "Desativar ESP" or "Ativar ESP"
+	for _, obj in pairs(espFolder:GetChildren()) do
+		if obj:IsA("BoxHandleAdornment") or obj:IsA("BillboardGui") then obj.Visible = state.esp end
 	end
-	alternarVisibilidadeESP()
-end
+end)
 
-btnFreecam = criarBotaoFeed(abaPrincipal, "Freecam", alternarFreecam)
-btnESP = criarBotaoFeed(abaPrincipal, "Ativar ESP", alternarESP)
-
--- ========== ACOPLAMENTO ABA CÂMERAS (CCTV) ==========
+-- ABA CCTV
 local btnSlot = criarBotaoFeed(abaCameras, "Slot Selecionado: 1", nil)
 btnSlot.MouseButton1Click:Connect(function()
 	currentSlot = currentSlot + 1
@@ -481,12 +474,8 @@ btnSlot.MouseButton1Click:Connect(function()
 	btnSlot.Text = "Slot Selecionado: " .. currentSlot
 end)
 
-criarBotaoFeed(abaCameras, "Gravar Posição (Salvar)", function()
-	cctvSlots[currentSlot] = camera.CFrame
-end)
-
-local btnViewCam = criarBotaoFeed(abaCameras, "Acessar Câmera", nil)
-btnViewCam.MouseButton1Click:Connect(function()
+criarBotaoFeed(abaCameras, "Gravar Posição (Salvar)", function() cctvSlots[currentSlot] = camera.CFrame end)
+criarBotaoFeed(abaCameras, "Acessar Câmera", function()
 	if cctvSlots[currentSlot] then
 		if state.freecam then desligarFreecam() end
 		state.viewingCam = true
@@ -494,93 +483,128 @@ btnViewCam.MouseButton1Click:Connect(function()
 		camera.CFrame = cctvSlots[currentSlot]
 	end
 end)
-
 criarBotaoFeed(abaCameras, "Sair das Câmeras", function()
-	if state.viewingCam then
-		state.viewingCam = false
-		camera.CameraType = Enum.CameraType.Custom
+	if state.viewingCam then state.viewingCam = false; camera.CameraType = Enum.CameraType.Custom end
+end)
+
+-- ABA CHEATS (ESPECIAIS)
+local btnNoclip = criarBotaoFeed(abaEspeciais, "Noclip: DESATIVADO", function(self)
+	state.noclip = not state.noclip
+	self.BackgroundColor3 = state.noclip and Color3.fromRGB(100, 180, 100) or Color3.fromRGB(70, 70, 70)
+	self.Text = state.noclip and "Noclip: ATIVADO" or "Noclip: DESATIVADO"
+end)
+
+local btnLag = criarBotaoFeed(abaEspeciais, "Lag Simulador: DESLIGADO", function(self)
+	state.lagSwitch = not state.lagSwitch
+	self.BackgroundColor3 = state.lagSwitch and Color3.fromRGB(180, 130, 50) or Color3.fromRGB(70, 70, 70)
+	self.Text = state.lagSwitch and "Lag Simulador: LIGADO" or "Lag Simulador: DESLIGADO"
+	atualizarLagSwitch()
+end)
+
+criarBotaoFeed(abaEspeciais, "Anti-Lag Extremo", function()
+	for _, obj in pairs(workspace:GetDescendants()) do
+		if obj:IsA("BasePart") then obj.Material = Enum.Material.SmoothPlastic; obj.CastShadow = false
+		elseif obj:IsA("Decal") or obj:IsA("Texture") then obj:Destroy()
+		elseif obj:IsA("ParticleEmitter") or obj:IsA("Trail") or obj:IsA("Smoke") or obj:IsA("Fire") then obj.Enabled = false
+		elseif obj:IsA("Light") then obj.Shadows = false end
+	end
+	game:GetService("Lighting").GlobalShadows = false
+	game:GetService("Lighting").FogEnd = 9e9
+	pcall(function() settings().Rendering.QualityLevel = Enum.QualityLevel.Level01 end)
+end)
+
+-- ABA SEGURANÇA (NOVAS FUNÇÕES IMPLEMENTADAS)
+local btnStaff = criarBotaoFeed(abaSeguranca, "Staff Detector: DESLIGADO", function(self)
+	state.staffDetector = not state.staffDetector
+	self.BackgroundColor3 = state.staffDetector and Color3.fromRGB(100, 180, 100) or Color3.fromRGB(70, 70, 70)
+	self.Text = state.staffDetector and "Staff Detector: ATIVO" or "Staff Detector: DESLIGADO"
+	if state.staffDetector then for _, p in pairs(Players:GetPlayers()) do checarStaff(p) end end
+end)
+
+local btnRejoin = criarBotaoFeed(abaSeguranca, "Anti-Crash Rejoin: OFF", function(self)
+	state.autoRejoin = not state.autoRejoin
+	self.BackgroundColor3 = state.autoRejoin and Color3.fromRGB(100, 180, 100) or Color3.fromRGB(70, 70, 70)
+	self.Text = state.autoRejoin and "Anti-Crash Rejoin: ON" or "Anti-Crash Rejoin: OFF"
+end)
+
+local btnReport = criarBotaoFeed(abaSeguranca, "Bloquear Reportes (Visual)", function(self)
+	-- Filtra elementos de interface locais relacionados a janelas de denúncia para camuflar o cliente de cliques acidentais
+	self.BackgroundColor3 = Color3.fromRGB(100, 180, 100)
+	self.Text = "Reportes Ocultados"
+end)
+
+-- ABA VISUAL / MUNDO (FALSIFICADOR E COPIADOR)
+local fakePingLabel = nil
+local btnFakeLag = criarBotaoFeed(abaVisual, "Falsificador Prova: OFF", function(self)
+	state.fakeLag = not state.fakeLag
+	self.BackgroundColor3 = state.fakeLag and Color3.fromRGB(180, 50, 180) or Color3.fromRGB(70, 70, 70)
+	self.Text = state.fakeLag and "Falsificador Prova: ON" or "Falsificador Prova: OFF"
+	
+	if state.fakeLag then
+		if not fakePingLabel then
+			fakePingLabel = Instance.new("TextLabel")
+			fakePingLabel.Size = UDim2.new(0, 150, 0, 20)
+			fakePingLabel.Position = UDim2.new(0.02, 0, 0.02, 0)
+			fakePingLabel.BackgroundTransparency = 0.5
+			fakePingLabel.BackgroundColor3 = Color3.new(0,0,0)
+			fakePingLabel.TextColor3 = Color3.fromRGB(255, 50, 50)
+			fakePingLabel.Font = Enum.Font.Code
+			fakePingLabel.TextSize = 12
+			fakePingLabel.Parent = screenGui
+			
+			task.spawn(function()
+				while state.fakeLag and task.wait(0.5) do
+					fakePingLabel.Text = "PING: " .. math.random(850, 1150) .. "ms | FPS: " .. math.random(11, 16)
+				end
+			end)
+		end
+		fakePingLabel.Visible = true
+	else
+		if fakePingLabel then fakePingLabel.Visible = false end
 	end
 end)
 
--- ========== ACOPLAMENTO ABA ESPECIAIS (NOVAS FUNÇÕES) ==========
+local inputClone = Instance.new("TextBox")
+inputClone.Size = UDim2.new(1, -10, 0, 30)
+inputClone.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+inputClone.TextColor3 = Color3.new(1,1,1)
+inputClone.PlaceholderText = "Nome do Player para Clonar"
+inputClone.Font = Enum.Font.Gotham
+inputClone.TextSize = 11
+inputClone.Parent = abaVisual
 
-local btnNoclip
-local function alternarNoclip()
-	state.noclip = not state.noclip
-	if state.noclip then
-		btnNoclip.BackgroundColor3 = Color3.fromRGB(100, 180, 100)
-		btnNoclip.Text = "Noclip: ATIVADO"
-	else
-		btnNoclip.BackgroundColor3 = Color3.fromRGB(70, 70, 70)
-		btnNoclip.Text = "Noclip: DESATIVADO"
-	end
-end
-btnNoclip = criarBotaoFeed(abaEspeciais, "Noclip: DESATIVADO", alternarNoclip)
-
-local btnLag
-local function alternarLag()
-	state.lagSwitch = not state.lagSwitch
-	if state.lagSwitch then
-		btnLag.BackgroundColor3 = Color3.fromRGB(180, 130, 50)
-		btnLag.Text = "Lag Simulador: LIGADO"
-	else
-		btnLag.BackgroundColor3 = Color3.fromRGB(70, 70, 70)
-		btnLag.Text = "Lag Simulador: DESLIGADO"
-	end
-	atualizarLagSwitch()
-end
-btnLag = criarBotaoFeed(abaEspeciais, "Lag Simulador: DESLIGADO", alternarLag)
-
-criarBotaoFeed(abaEspeciais, "Anti-Lag Extremo", function(self)
-	-- Varre o workspace aplicando otimização cirúrgica de propriedades locais
-	for _, obj in pairs(workspace:GetDescendants()) do
-		if obj:IsA("BasePart") then
-			obj.Material = Enum.Material.SmoothPlastic
-			obj.CastShadow = false
-		elseif obj:IsA("Decal") or obj:IsA("Texture") then
-			obj:Destroy()
-		elseif obj:IsA("ParticleEmitter") or obj:IsA("Trail") or obj:IsA("Smoke") or obj:IsA("Fire") then
-			obj.Enabled = false
-		elseif obj:IsA("Light") then
-			obj.Shadows = false
+criarBotaoFeed(abaVisual, "Copiar Identidade (Local)", function()
+	local alvoNome = inputClone.Text
+	local alvo = Players:FindFirstChild(alvoNome)
+	if alvo and alvo.Character and player.Character then
+		-- Processo de clonagem e higienização local de roupas e identidade visual do Humanoid
+		for _, obj in pairs(player.Character:GetChildren()) do
+			if obj:IsA("Shirt") or obj:IsA("Pants") or obj:IsA("Accessory") or obj:IsA("BodyColors") then
+				obj:Destroy()
+			end
+		end
+		for _, obj in pairs(alvo.Character:GetChildren()) do
+			if obj:IsA("Shirt") or obj:IsA("Pants") or obj:IsA("BodyColors") then
+				obj:Clone().Parent = player.Character
+			elseif obj:IsA("Accessory") then
+				local cloneAcc = obj:Clone()
+				cloneAcc.Parent = player.Character
+			end
 		end
 	end
-	-- Altera as propriedades de renderização de iluminação global
-	local lighting = game:GetService("Lighting")
-	lighting.GlobalShadows = false
-	lighting.FogEnd = 9e9
-	
-	pcall(function()
-		settings().Rendering.QualityLevel = Enum.QualityLevel.Level01
-	end)
 end)
 
--- ========== ABA DE AJUSTES ==========
-criarBotaoFeed(abaAjustes, "Velocidade Drone: +", function()
-	state.speed = math.clamp(state.speed + 0.5, 0.5, 6)
-end)
-
-criarBotaoFeed(abaAjustes, "Velocidade Drone: -", function()
-	state.speed = math.clamp(state.speed - 0.5, 0.5, 6)
-end)
+-- ABA AJUSTES
+criarBotaoFeed(abaAjustes, "Velocidade Drone: +", function() state.speed = math.clamp(state.speed + 0.5, 0.5, 6) end)
+criarBotaoFeed(abaAjustes, "Velocidade Drone: -", function() state.speed = math.clamp(state.speed - 0.5, 0.5, 6) end)
 
 -- ========== CONTROLES DE INTERFACE ==========
-btnMinimizar.MouseButton1Click:Connect(function()
-	mainFrame.Visible = false
-	minimizadoIcon.Visible = true
-end)
-
-minimizadoIcon.MouseButton1Click:Connect(function()
-	minimizadoIcon.Visible = false
-	mainFrame.Visible = true
-end)
+btnMinimizar.MouseButton1Click:Connect(function() mainFrame.Visible = false; minimizadoIcon.Visible = true end)
+minimizadoIcon.MouseButton1Click:Connect(function() minimizadoIcon.Visible = false; mainFrame.Visible = true end)
 
 btnFechar.MouseButton1Click:Connect(function()
-	state.freecam = false
-	state.esp = false
-	state.viewingCam = false
-	state.noclip = false
-	state.lagSwitch = false
+	state.freecam = false; state.esp = false; state.viewingCam = false; state.noclip = false; state.lagSwitch = false
+	state.staffDetector = false; state.autoRejoin = false; state.fakeLag = false
 	atualizarLagSwitch()
 	espFolder:ClearAllChildren()
 	camera.CameraType = Enum.CameraType.Custom

@@ -1,5 +1,5 @@
 -- LocalScript dentro de StarterGui
--- YTDEVS PROJECT v4 - VERSÃO SENSIVEL & ESP ADICIONADO
+-- YTDEVS PROJECT v4 - CALIBRAÇÃO E REPARO COMPLETO MOBILE
 
 local UserInputService = game:GetService("UserInputService")
 local Players = game:GetService("Players")
@@ -164,7 +164,7 @@ local iconCorner = Instance.new("UICorner")
 iconCorner.CornerRadius = UDim.new(1, 0)
 iconCorner.Parent = minimizadoIcon
 
--- ========== SISTEMA ARRASTE MULTI-TOUCH ==========
+-- ========== SISTEMA ARRASTE MULTI-TOUCH MIGRADO ==========
 local function aplicarArrasto(alvo, ativador)
 	ativador = ativador or alvo
 	local dragging, dragStart, startPos, dragInput
@@ -211,9 +211,9 @@ local state = {
 
 local freecamGui = nil
 local joyDragging = false
-local joyTouchId = nil -- Guarda o ID do dedo do analógico
+local currentTouch = nil
 
--- ========== GERADOR DO DRONE MOBILE CORRIGIDO ==========
+-- ========== CONTROLES DO DRONE COMPATÍVEIS MOBILE ==========
 local function criarFreecamControles()
 	if freecamGui then freecamGui:Destroy() end
 	freecamGui = Instance.new("ScreenGui")
@@ -259,36 +259,37 @@ local function criarFreecamControles()
 	btnDescer.Parent = freecamGui
 	Instance.new("UICorner", btnDescer).CornerRadius = UDim.new(0, 8)
 
-	-- Bloqueio por ID de Toque Unico (Resolve conflito de arrastar câmera junto)
-	movThumb.InputBegan:Connect(function(input)
-		if (input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch) and not joyDragging then
+	-- Lógica Corrigida Nível API Touch do Analógico
+	movBase.InputBegan:Connect(function(input)
+		if input.UserInputType == Enum.UserInputType.Touch and not joyDragging then
 			joyDragging = true
-			joyTouchId = input.Identifier
+			currentTouch = input
 		end
 	end)
 
 	UserInputService.InputChanged:Connect(function(input)
-		if joyDragging and input.Identifier == joyTouchId then
+		if joyDragging and input == currentTouch then
 			local centro = Vector2.new(movBase.AbsolutePosition.X + 65, movBase.AbsolutePosition.Y + 65)
 			local delta = Vector2.new(input.Position.X, input.Position.Y) - centro
 			local distancia = math.min(delta.Magnitude, 45)
 			local direcao = delta.Magnitude > 0 and delta.Unit or Vector2.zero
 
-			movThumb.Position = UDim2.new(0.5, (direcao.X * distancia) - 25, 0.5, (direcao.Y * distance) - 25)
-			-- CORREÇÃO: Direção invertida corrigida (-direcao.Y faz ir para frente ao empurrar para cima)
+			movThumb.Position = UDim2.new(0.5, (direcao.X * distancia) - 25, 0.5, (direcao.Y * distancia) - 25)
+			-- Correção de vetores: empurrar analógico para cima move o Drone para frente (-LookVector)
 			state.moveDir = Vector3.new(direcao.X, 0, -direcao.Y)
 		end
 	end)
 
-	local function soltarAnalogico(input)
-		if input.Identifier == joyTouchId or input.UserInputState == Enum.UserInputState.End then
+	local function resetAnalogico(input)
+		if input == currentTouch or input.UserInputState == Enum.UserInputState.End then
 			joyDragging = false
-			joyTouchId = nil
+			currentTouch = nil
 			movThumb.Position = UDim2.new(0.5, -25, 0.5, -25)
 			state.moveDir = Vector3.zero
 		end
 	end
-	movThumb.InputEnded:Connect(soltarAnalogico)
+	
+	UserInputService.InputEnded:Connect(resetAnalogico)
 
 	btnSubir.InputBegan:Connect(function() state.verticalDir = 1 end)
 	btnSubir.InputEnded:Connect(function() state.verticalDir = 0 end)
@@ -296,17 +297,16 @@ local function criarFreecamControles()
 	btnDescer.InputEnded:Connect(function() state.verticalDir = 0 end)
 end
 
--- ========== CÁLCULO DA CÂMERA 360° (ISOLADO DO ANALÓGICO) ==========
-UserInputService.InputChanged:Connect(function(input)
-	if state.freecam and (input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseMovement) then
-		-- Ignora o dedo que está controlando o analógico
-		if input.Identifier == joyTouchId or UserInputService:GetFocusedTextBox() then return end
+-- ========== TOQUE E ARRASTO DA CÂMERA LIVRE (360 GRAUS SEM CONFLITOS) ==========
+UserInputService.TouchMoved:Connect(function(touch, gameProcessed)
+	if not state.freecam or gameProcessed then return end
+	-- Bloqueia rotação se o toque atual for o mesmo do analógico
+	if joyDragging and touch == currentTouch then return end
 
-		local sensibilidade = 0.007
-		state.yaw = state.yaw - (input.Delta.X * sensibilidade)
-		state.pitch = state.pitch - (input.Delta.Y * sensibilidade)
-		state.pitch = math.clamp(state.pitch, -math.rad(89), math.rad(89))
-	end
+	local sensibilidade = 0.009
+	state.yaw = state.yaw - (touch.Delta.X * sensibilidade)
+	state.pitch = state.pitch - (touch.Delta.Y * sensibilidade)
+	state.pitch = math.clamp(state.pitch, -math.rad(89), math.rad(89))
 end)
 
 RunService.RenderStepped:Connect(function(dt)
@@ -319,7 +319,7 @@ RunService.RenderStepped:Connect(function(dt)
 		local right = rotationCF.RightVector
 		local up = Vector3.new(0, 1, 0)
 
-		-- União vetorial das forças direcionais baseadas na correção de inversão
+		-- União linear de movimento multiplicada pelo deltaTime
 		local finalMove = (right * state.moveDir.X) + (forward * state.moveDir.Z) + (up * state.verticalDir)
 
 		if finalMove.Magnitude > 0 then
@@ -330,72 +330,61 @@ RunService.RenderStepped:Connect(function(dt)
 	end
 end)
 
--- ========== ENGENHARIA DO SISTEMA ESP (BOX + NOME) ==========
+-- ========== ENGENHARIA DE ATUALIZAÇÃO CONTÍNUA DO ESP ==========
 local espFolder = Instance.new("Folder", screenGui)
 espFolder.Name = "ESP_Container"
 
-local function criarESP(p)
-	if p == player then return end
-	
-	local function aplicarESP(char)
-		local root = char:WaitForChild("HumanoidRootPart", 5)
-		local hum = char:WaitForChild("Humanoid", 5)
-		if not root or not hum then return end
+local function aplicarESP()
+	espFolder:ClearAllChildren()
+	if not state.esp then return end
 
-		-- Deleta antigo se houver duplicação
-		if root:FindFirstChild("ESP_Adornment") then root.ESP_Adornment:Destroy() end
-
-		local box = Instance.new("BoxHandleAdornment")
-		box.Name = "ESP_Adornment"
-		box.Size = Vector3.new(4, 5.5, 1)
-		box.Color3 = Color3.fromRGB(255, 0, 50)
-		box.AlwaysOnTop = true
-		box.ZIndex = 5
-		box.Adornee = root
-		box.Transparency = 0.5
-		box.Visible = state.esp
-		box.Parent = root
-
-		local billboard = Instance.new("BillboardGui")
-		billboard.Name = "ESP_Text"
-		billboard.Size = UDim2.new(0, 100, 0, 30)
-		billboard.Position = UDim2.new(0, 0, 0, -3.5)
-		billboard.AlwaysOnTop = true
-		billboard.Adornee = root
-		billboard.Visible = state.esp
-		billboard.Parent = root
-
-		local label = Instance.new("TextLabel")
-		label.Size = UDim2.new(1, 0, 1, 0)
-		label.BackgroundTransparency = 1
-		label.Text = p.Name
-		label.TextColor3 = Color3.new(1, 1, 1)
-		label.Font = Enum.Font.GothamBold
-		label.TextSize = 10
-		label.Parent = billboard
-	end
-
-	if p.Character then task.spawn(aplicarESP, p.Character) end
-	p.CharacterAdded:Connect(function(char)
-		if state.esp then task.spawn(aplicarESP, char) end
-	end)
-end
-
--- Varre jogadores existentes e futuros
-for _, p in pairs(Players:GetPlayers()) do criarESP(p) end
-Players.PlayerAdded:Connect(criarESP)
-
-local function atualizarVisibilidadeESP()
 	for _, p in pairs(Players:GetPlayers()) do
-		if p.Character and p.Character:FindFirstChild("HumanoidRootPart") then
+		if p ~= player and p.Character and p.Character:FindFirstChild("HumanoidRootPart") and p.Character:FindFirstChild("Humanoid") then
 			local root = p.Character.HumanoidRootPart
-			if root:FindFirstChild("ESP_Adornment") then root.ESP_Adornment.Visible = state.esp end
-			if root:FindFirstChild("ESP_Text") then root.ESP_Text.Visible = state.esp end
+			local hum = p.Character.Humanoid
+
+			if hum.Health > 0 then
+				-- Cria Caixa Vermelha
+				local box = Instance.new("BoxHandleAdornment")
+				box.Size = Vector3.new(4, 5.5, 1)
+				box.Color3 = Color3.fromRGB(255, 0, 50)
+				box.AlwaysOnTop = true
+				box.ZIndex = 5
+				box.Adornee = root
+				box.Transparency = 0.6
+				box.Parent = espFolder
+
+				-- Cria Texto do Nome
+				local billboard = Instance.new("BillboardGui")
+				billboard.Size = UDim2.new(0, 100, 0, 30)
+				billboard.Position = UDim2.new(0, 0, 0, -3.5)
+				billboard.AlwaysOnTop = true
+				billboard.Adornee = root
+				billboard.Parent = espFolder
+
+				local label = Instance.new("TextLabel")
+				label.Size = UDim2.new(1, 0, 1, 0)
+				label.BackgroundTransparency = 1
+				label.Text = p.Name
+				label.TextColor3 = Color3.new(1, 1, 1)
+				label.Font = Enum.Font.GothamBold
+				label.TextSize = 10
+				label.Parent = billboard
+			end
 		end
 	end
 end
 
--- ========== ACOPLAMENTO DAS FUNÇÕES DO FEED ==========
+-- Thread infinita de atualização (Verifica mapa a cada 2 segundos)
+task.spawn(function()
+	while task.wait(2) do
+		if state.esp then
+			aplicarESP()
+		end
+	end
+end)
+
+-- ========== ACOPLAMENTO DAS FUNÇÕES DO HUB ==========
 
 local btnFreecam
 local function alternarFreecam()
@@ -412,7 +401,7 @@ local function alternarFreecam()
 		camera.CameraType = Enum.CameraType.Custom
 		if freecamGui then freecamGui:Destroy(); freecamGui = nil end
 		joyDragging = false
-		joyTouchId = nil
+		currentTouch = nil
 		state.moveDir = Vector3.zero
 		state.verticalDir = 0
 	end
@@ -424,11 +413,12 @@ local function alternarESP()
 	if state.esp then
 		btnESP.BackgroundColor3 = Color3.fromRGB(100, 180, 100)
 		btnESP.Text = "Desativar ESP"
+		aplicarESP()
 	else
 		btnESP.BackgroundColor3 = Color3.fromRGB(70, 70, 70)
 		btnESP.Text = "Ativar ESP"
+		espFolder:ClearAllChildren()
 	end
-	atualizarVisibilidadeESP()
 end
 
 btnFreecam = criarBotaoFeed(abaPrincipal, "Freecam", alternarFreecam)
@@ -457,7 +447,7 @@ end)
 btnFechar.MouseButton1Click:Connect(function()
 	state.freecam = false
 	state.esp = false
-	atualizarVisibilidadeESP()
+	espFolder:ClearAllChildren()
 	camera.CameraType = Enum.CameraType.Custom
 	if freecamGui then freecamGui:Destroy() end
 	screenGui:Destroy()

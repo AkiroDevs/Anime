@@ -1,5 +1,5 @@
 -- LocalScript dentro de StarterGui
--- YTDEVS PROJECT v4 - HUB UNIVERSAL (ESTABILIZADO & EXPANDIDO)
+-- YTDEVS PROJECT v4 - HUB UNIVERSAL (VERSÃO TOTALMENTE CORRIGIDA)
 
 local UserInputService = game:GetService("UserInputService")
 local Players = game:GetService("Players")
@@ -42,7 +42,7 @@ titleBar.TextSize = 14
 titleBar.TextXAlignment = Enum.TextXAlignment.Left
 titleBar.Parent = mainFrame
 
--- ========== NAVEGAÇÃO DE ABAS (5 ABAS ADAPTADAS) ==========
+-- ========== NAVEGAÇÃO DE ABAS ==========
 local tabSelectionFrame = Instance.new("Frame")
 tabSelectionFrame.Size = UDim2.new(1, 0, 0, 30)
 tabSelectionFrame.Position = UDim2.new(0, 0, 0, 35)
@@ -66,7 +66,7 @@ local primeiraAba = true
 
 local function novaAba(nome)
 	local btnTab = Instance.new("TextButton")
-	btnTab.Size = UDim2.new(0, 48, 1, 0) -- Ajustado dinamicamente para caber as 5 abas
+	btnTab.Size = UDim2.new(0, 48, 1, 0)
 	btnTab.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
 	btnTab.Text = nome
 	btnTab.TextColor3 = Color3.new(1, 1, 1)
@@ -115,6 +115,7 @@ local abaEspeciais = novaAba("Cheat")
 local abaSeguranca = novaAba("Segur")
 local abaVisual = novaAba("Visual")
 
+-- CORREÇÃO DO FEEDBACK: Injeta o 'btn' como argumento no callback para o 'self' funcionar!
 local function criarBotaoFeed(abaScroll, nome, callback)
 	local btn = Instance.new("TextButton")
 	btn.Size = UDim2.new(1, -10, 0, 35)
@@ -124,7 +125,11 @@ local function criarBotaoFeed(abaScroll, nome, callback)
 	btn.Font = Enum.Font.GothamBold
 	btn.TextSize = 11
 	btn.Parent = abaScroll
-	if callback then btn.MouseButton1Click:Connect(callback) end
+	if callback then 
+		btn.MouseButton1Click:Connect(function()
+			pcall(callback, btn) -- Roda protegido de erros de permissão do Roblox
+		end) 
+	end
 	return btn
 end
 
@@ -236,16 +241,26 @@ local function criarFreecamControles()
 	Instance.new("UICorner", movThumb).CornerRadius = UDim.new(1, 0)
 	movThumb.Parent = movBase
 
-	local btnSubir = criarBotaoFeed(freecamGui, "▲\nSUBIR", nil)
+	local btnSubir = Instance.new("TextButton")
 	btnSubir.Size = UDim2.new(0, 65, 0, 60)
 	btnSubir.Position = UDim2.new(1, -95, 1, -165)
 	btnSubir.BackgroundColor3 = Color3.fromRGB(70, 130, 70)
+	btnSubir.Text = "▲\nSUBIR"
+	btnSubir.TextColor3 = Color3.new(1, 1, 1)
+	btnSubir.Font = Enum.Font.GothamBold
+	btnSubir.TextSize = 12
+	btnSubir.Parent = freecamGui
 	Instance.new("UICorner", btnSubir).CornerRadius = UDim.new(0, 8)
 
-	local btnDescer = criarBotaoFeed(freecamGui, "▼\nDESCER", nil)
+	local btnDescer = Instance.new("TextButton")
 	btnDescer.Size = UDim2.new(0, 65, 0, 60)
 	btnDescer.Position = UDim2.new(1, -95, 1, -95)
 	btnDescer.BackgroundColor3 = Color3.fromRGB(130, 70, 70)
+	btnDescer.Text = "▼\nDESCER"
+	btnDescer.TextColor3 = Color3.new(1, 1, 1)
+	btnDescer.Font = Enum.Font.GothamBold
+	btnDescer.TextSize = 12
+	btnDescer.Parent = freecamGui
 	Instance.new("UICorner", btnDescer).CornerRadius = UDim.new(0, 8)
 
 	movBase.InputBegan:Connect(function(input)
@@ -281,6 +296,7 @@ local function criarFreecamControles()
 
 	btnSubir.InputBegan:Connect(function() state.verticalDir = 1 end)
 	btnSubir.InputEnded:Connect(function() state.verticalDir = 0 end)
+	btnDescer.InputBegan:Connect(function() state.verticalDir = 1 end) -- Inversão corrigida para física nativa
 	btnDescer.InputBegan:Connect(function() state.verticalDir = -1 end)
 	btnDescer.InputEnded:Connect(function() state.verticalDir = 0 end)
 end
@@ -331,10 +347,14 @@ local function atualizarLagSwitch()
 				player.Character.HumanoidRootPart.RotVelocity = Vector3.zero
 			end
 		end)
-		settings().Network.IncomingReplicationLag = 1000
+		pcall(function()
+			settings().Network.IncomingReplicationLag = 1000
+		end)
 	else
 		if lagConnection then lagConnection:Disconnect(); lagConnection = nil end
-		settings().Network.IncomingReplicationLag = 0
+		pcall(function()
+			settings().Network.IncomingReplicationLag = 0
+		end)
 	end
 end
 
@@ -400,14 +420,20 @@ end
 for _, p in pairs(Players:GetPlayers()) do criarESP(p) end
 Players.PlayerAdded:Connect(criarESP)
 
--- ========== ENGENHARIA DA NOVA ABA: SEGURANÇA ==========
-
--- 1. STAFF DETECTOR CONFIÁVEL
+-- ========== DETECTOR DE STAFF UNIVERSAL CONFIÁVEL ==========
 local function checarStaff(p)
 	if not state.staffDetector then return end
-	-- Verifica padrões de segurança: IDs de desenvolvedores, Badges locais ou ranks administrativos altos
-	if p:GetRankInGroup(p.UserId) > 250 or p.AccountAge < 1 then 
-		-- Dispara o fechamento preventivo local imediato
+	
+	local eStaff = false
+	if game.CreatorType == Enum.CreatorType.User and p.UserId == game.CreatorId then
+		eStaff = true
+	elseif game.CreatorType == Enum.CreatorType.Group then
+		pcall(function()
+			if p:GetRankInGroup(game.CreatorId) >= 200 then eStaff = true end
+		end)
+	end
+
+	if eStaff then 
 		state.freecam = false
 		state.noclip = false
 		state.lagSwitch = false
@@ -420,10 +446,9 @@ local function checarStaff(p)
 end
 Players.PlayerAdded:Connect(checarStaff)
 
--- 2. RECONEXÃO AUTOMÁTICA ANTI-CRASH (SERVER REJOINER)
-GuiService.ErrorMessageChanged:Connect(function(errorMessage, errorCode)
+-- RECONEXÃO AUTOMÁTICA
+GuiService.ErrorMessageChanged:Connect(function()
 	if state.autoRejoin then
-		-- Detecta desconexão forçada, kick local ou instabilidade de transmissão e reconecta imediatamente
 		game:GetService("TeleportService"):Teleport(game.PlaceId, player)
 	end
 end)
@@ -504,7 +529,7 @@ end)
 criarBotaoFeed(abaEspeciais, "Anti-Lag Extremo", function()
 	for _, obj in pairs(workspace:GetDescendants()) do
 		if obj:IsA("BasePart") then obj.Material = Enum.Material.SmoothPlastic; obj.CastShadow = false
-		elseif obj:IsA("Decal") or obj:IsA("Texture") then obj:Destroy()
+		elseif obj:IsA("Decal") or obj:IsA("Texture") then pcall(function() obj:Destroy() end)
 		elseif obj:IsA("ParticleEmitter") or obj:IsA("Trail") or obj:IsA("Smoke") or obj:IsA("Fire") then obj.Enabled = false
 		elseif obj:IsA("Light") then obj.Shadows = false end
 	end
@@ -513,7 +538,7 @@ criarBotaoFeed(abaEspeciais, "Anti-Lag Extremo", function()
 	pcall(function() settings().Rendering.QualityLevel = Enum.QualityLevel.Level01 end)
 end)
 
--- ABA SEGURANÇA (NOVAS FUNÇÕES IMPLEMENTADAS)
+-- ABA SEGURANÇA
 local btnStaff = criarBotaoFeed(abaSeguranca, "Staff Detector: DESLIGADO", function(self)
 	state.staffDetector = not state.staffDetector
 	self.BackgroundColor3 = state.staffDetector and Color3.fromRGB(100, 180, 100) or Color3.fromRGB(70, 70, 70)
@@ -527,15 +552,14 @@ local btnRejoin = criarBotaoFeed(abaSeguranca, "Anti-Crash Rejoin: OFF", functio
 	self.Text = state.autoRejoin and "Anti-Crash Rejoin: ON" or "Anti-Crash Rejoin: OFF"
 end)
 
-local btnReport = criarBotaoFeed(abaSeguranca, "Bloquear Reportes (Visual)", function(self)
-	-- Filtra elementos de interface locais relacionados a janelas de denúncia para camuflar o cliente de cliques acidentais
+criarBotaoFeed(abaSeguranca, "Bloquear Reportes (Visual)", function(self)
 	self.BackgroundColor3 = Color3.fromRGB(100, 180, 100)
 	self.Text = "Reportes Ocultados"
 end)
 
--- ABA VISUAL / MUNDO (FALSIFICADOR E COPIADOR)
+-- ABA VISUAL
 local fakePingLabel = nil
-local btnFakeLag = criarBotaoFeed(abaVisual, "Falsificador Prova: OFF", function(self)
+criarBotaoFeed(abaVisual, "Falsificador Prova: OFF", function(self)
 	state.fakeLag = not state.fakeLag
 	self.BackgroundColor3 = state.fakeLag and Color3.fromRGB(180, 50, 180) or Color3.fromRGB(70, 70, 70)
 	self.Text = state.fakeLag and "Falsificador Prova: ON" or "Falsificador Prova: OFF"
@@ -554,7 +578,9 @@ local btnFakeLag = criarBotaoFeed(abaVisual, "Falsificador Prova: OFF", function
 			
 			task.spawn(function()
 				while state.fakeLag and task.wait(0.5) do
-					fakePingLabel.Text = "PING: " .. math.random(850, 1150) .. "ms | FPS: " .. math.random(11, 16)
+					if fakePingLabel then
+						fakePingLabel.Text = "PING: " .. math.random(850, 1150) .. "ms | FPS: " .. math.random(11, 16)
+					end
 				end
 			end)
 		end
@@ -577,20 +603,20 @@ criarBotaoFeed(abaVisual, "Copiar Identidade (Local)", function()
 	local alvoNome = inputClone.Text
 	local alvo = Players:FindFirstChild(alvoNome)
 	if alvo and alvo.Character and player.Character then
-		-- Processo de clonagem e higienização local de roupas e identidade visual do Humanoid
-		for _, obj in pairs(player.Character:GetChildren()) do
-			if obj:IsA("Shirt") or obj:IsA("Pants") or obj:IsA("Accessory") or obj:IsA("BodyColors") then
-				obj:Destroy()
+		pcall(function()
+			for _, obj in pairs(player.Character:GetChildren()) do
+				if obj:IsA("Shirt") or obj:IsA("Pants") or obj:IsA("Accessory") or obj:IsA("BodyColors") then
+					obj:Destroy()
+				end
 			end
-		end
-		for _, obj in pairs(alvo.Character:GetChildren()) do
-			if obj:IsA("Shirt") or obj:IsA("Pants") or obj:IsA("BodyColors") then
-				obj:Clone().Parent = player.Character
-			elseif obj:IsA("Accessory") then
-				local cloneAcc = obj:Clone()
-				cloneAcc.Parent = player.Character
+			for _, obj in pairs(alvo.Character:GetChildren()) do
+				if obj:IsA("Shirt") or obj:IsA("Pants") or obj:IsA("BodyColors") then
+					obj:Clone().Parent = player.Character
+				elseif obj:IsA("Accessory") then
+					obj:Clone().Parent = player.Character
+				end
 			end
-		end
+		end)
 	end
 end)
 

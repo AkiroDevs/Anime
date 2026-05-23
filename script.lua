@@ -116,44 +116,31 @@ local function criarFreecamControles()
 	freecamGui.Parent = player.PlayerGui
 	freecamGui.ResetOnSpawn = false
 
-	-- Joystick de movimento (esquerda)
-	local movBase = Instance.new("ImageButton")
-	movBase.Size = UDim2.new(0, 120, 0, 120)
-	movBase.Position = UDim2.new(0, 30, 1, -160)
+	-- Joystick de movimento (esquerda) - formato circular
+	local movBase = Instance.new("Frame")
+	movBase.Size = UDim2.new(0, 130, 0, 130)
+	movBase.Position = UDim2.new(0, 30, 1, -170)
 	movBase.BackgroundColor3 = Color3.fromRGB(255,255,255)
-	movBase.BackgroundTransparency = 0.8
-	movBase.Image = "rbxassetid://0"
-	movBase.Visible = true
-	movBase.Active = false
+	movBase.BackgroundTransparency = 0.85
+	movBase.BorderSizePixel = 0
+	-- Tornar redondo
+	local corner = Instance.new("UICorner")
+	corner.CornerRadius = UDim.new(1, 0)  -- totalmente circular
+	corner.Parent = movBase
 	movBase.Parent = freecamGui
 
-	local movThumb = Instance.new("ImageButton")
+	local movThumb = Instance.new("Frame")
 	movThumb.Size = UDim2.new(0, 50, 0, 50)
 	movThumb.Position = UDim2.new(0.5, -25, 0.5, -25)
 	movThumb.BackgroundColor3 = Color3.fromRGB(255,255,255)
 	movThumb.BackgroundTransparency = 0.5
-	movThumb.Image = "rbxassetid://0"
+	movThumb.BorderSizePixel = 0
+	local cornerThumb = Instance.new("UICorner")
+	cornerThumb.CornerRadius = UDim.new(1, 0)
+	cornerThumb.Parent = movThumb
 	movThumb.Parent = movBase
 
-	-- Joystick de visão (direita)
-	local lookBase = Instance.new("ImageButton")
-	lookBase.Size = UDim2.new(0, 120, 0, 120)
-	lookBase.Position = UDim2.new(1, -150, 1, -160)
-	lookBase.BackgroundColor3 = Color3.fromRGB(255,255,255)
-	lookBase.BackgroundTransparency = 0.8
-	lookBase.Image = "rbxassetid://0"
-	lookBase.Active = false
-	lookBase.Parent = freecamGui
-
-	local lookThumb = Instance.new("ImageButton")
-	lookThumb.Size = UDim2.new(0, 50, 0, 50)
-	lookThumb.Position = UDim2.new(0.5, -25, 0.5, -25)
-	lookThumb.BackgroundColor3 = Color3.fromRGB(255,255,255)
-	lookThumb.BackgroundTransparency = 0.5
-	lookThumb.Image = "rbxassetid://0"
-	lookThumb.Parent = lookBase
-
-	-- Botões Subir / Descer (posicionados no canto direito superior)
+	-- Botões Subir / Descer (canto direito inferior)
 	local btnSubir = Instance.new("TextButton")
 	btnSubir.Size = UDim2.new(0, 60, 0, 60)
 	btnSubir.Position = UDim2.new(1, -70, 0, 200)
@@ -176,62 +163,68 @@ local function criarFreecamControles()
 
 	-- Variáveis de entrada
 	local movInput = Vector2.zero
-	local lookInput = Vector2.zero
 	local ascendendo = false
 	local descendendo = false
 	local movTouch = nil
 	local lookTouch = nil
+	local lastLookPos = nil  -- para arrasto de visão
 
-	-- Atualiza movimento do thumb
+	-- Atualiza posição do thumb do movimento
 	local function updateMovThumb(input)
-		local maxDist = 35
-		if input.Magnitude > maxDist then
-			input = input.Unit * maxDist
+		local maxDist = 40  -- raio máximo dentro do círculo (130/2 = 65, mas limitamos um pouco menor)
+		local clamped = input
+		if clamped.Magnitude > maxDist then
+			clamped = clamped.Unit * maxDist
 		end
-		movThumb.Position = UDim2.new(0.5, input.X - 25, 0.5, input.Y - 25)
-		movInput = input / maxDist
-	end
-
-	local function updateLookThumb(input)
-		local maxDist = 35
-		if input.Magnitude > maxDist then
-			input = input.Unit * maxDist
-		end
-		lookThumb.Position = UDim2.new(0.5, input.X - 25, 0.5, input.Y - 25)
-		lookInput = input / maxDist
+		movThumb.Position = UDim2.new(0.5, clamped.X - 25, 0.5, clamped.Y - 25)
+		movInput = clamped / maxDist  -- normalizado entre -1 e 1
 	end
 
 	-- Conexões de toque
 	UserInputService.TouchStarted:Connect(function(touch, gameProcessed)
 		if not freecamAtivo then return end
 		local pos = touch.Position
-		-- Verifica se toque está na região do joystick de movimento (esquerda 40% da tela)
-		if pos.X < camera.ViewportSize.X * 0.4 and not movTouch then
+		-- Verifica se o toque está na região do joystick de movimento (lado esquerdo)
+		local movAbsPos = movBase.AbsolutePosition
+		local movAbsSize = movBase.AbsoluteSize
+		local isInMov = pos.X >= movAbsPos.X and pos.X <= movAbsPos.X + movAbsSize.X
+			and pos.Y >= movAbsPos.Y and pos.Y <= movAbsPos.Y + movAbsSize.Y
+
+		-- Verifica se está nos botões de subir/descer (para ignorar)
+		local subirAbsPos = btnSubir.AbsolutePosition
+		local subirAbsSize = btnSubir.AbsoluteSize
+		local descerAbsPos = btnDescer.AbsolutePosition
+		local descerAbsSize = btnDescer.AbsoluteSize
+		local isOnButton = (pos.X >= subirAbsPos.X and pos.X <= subirAbsPos.X + subirAbsSize.X and pos.Y >= subirAbsPos.Y and pos.Y <= subirAbsPos.Y + subirAbsSize.Y)
+			or (pos.X >= descerAbsPos.X and pos.X <= descerAbsPos.X + descerAbsSize.X and pos.Y >= descerAbsPos.Y and pos.Y <= descerAbsPos.Y + descerAbsSize.Y)
+
+		if isInMov and not movTouch then
 			movTouch = touch
-			local basePos = movBase.AbsolutePosition
-			local baseSize = movBase.AbsoluteSize
-			local rel = pos - basePos
+			local rel = pos - movAbsPos
 			updateMovThumb(rel)
-		-- Joystick de visão (direita 40% da tela)
-		elseif pos.X > camera.ViewportSize.X * 0.6 and not lookTouch then
+		elseif not isOnButton and not lookTouch then
+			-- Qualquer outro lugar da tela vira controle de visão
 			lookTouch = touch
-			local basePos = lookBase.AbsolutePosition
-			local baseSize = lookBase.AbsoluteSize
-			local rel = pos - basePos
-			updateLookThumb(rel)
+			lastLookPos = pos
 		end
 	end)
 
 	UserInputService.TouchMoved:Connect(function(touch, gameProcessed)
 		if not freecamAtivo then return end
 		if touch == movTouch then
-			local basePos = movBase.AbsolutePosition
-			local rel = touch.Position - basePos
+			local movAbsPos = movBase.AbsolutePosition
+			local rel = touch.Position - movAbsPos
 			updateMovThumb(rel)
 		elseif touch == lookTouch then
-			local basePos = lookBase.AbsolutePosition
-			local rel = touch.Position - basePos
-			updateLookThumb(rel)
+			if lastLookPos then
+				local delta = touch.Position - lastLookPos
+				-- Sensibilidade da rotação
+				local sens = 0.2
+				local yaw = -delta.X * sens
+				local pitch = delta.Y * sens
+				camera.CFrame = camera.CFrame * CFrame.Angles(0, math.rad(yaw), 0) * CFrame.Angles(math.rad(pitch), 0, 0)
+				lastLookPos = touch.Position
+			end
 		end
 	end)
 
@@ -243,22 +236,11 @@ local function criarFreecamControles()
 			movInput = Vector2.zero
 		elseif touch == lookTouch then
 			lookTouch = nil
-			lookThumb.Position = UDim2.new(0.5, -25, 0.5, -25)
-			lookInput = Vector2.zero
+			lastLookPos = nil
 		end
 	end)
 
-	-- Botões Subir/Descer com toque
-	btnSubir.MouseButton1Click:Connect(function() end) -- evita propagação
-	btnSubir.TouchTap:Connect(function()
-		ascendendo = not ascendendo
-		btnSubir.BackgroundColor3 = ascendendo and Color3.fromRGB(100, 200, 100) or Color3.fromRGB(70, 130, 70)
-	end)
-	btnSubir.TouchLongPress:Connect(function()
-		-- já tratado pelo toque contínuo na renderização
-	end)
-	-- Para manter pressionado, usamos o evento de toque contínuo
-	local subirTocado = false
+	-- Botões Subir/Descer (comportamento de pressionar contínuo)
 	btnSubir.InputBegan:Connect(function(input)
 		if input.UserInputType == Enum.UserInputType.Touch then
 			ascendendo = true
@@ -286,35 +268,25 @@ local function criarFreecamControles()
 	end)
 
 	-- Loop de atualização da câmera freecam
-	local lookSensitivity = 0.04
 	local moveSpeed = 40
 	local ascendSpeed = 30
 
 	RunService.RenderStepped:Connect(function(deltaTime)
 		if not freecamAtivo then return end
-		-- Rotacionar câmera com o joystick de visão
-		if lookInput ~= Vector2.zero then
-			local yaw = -lookInput.X * lookSensitivity * 10
-			local pitch = lookInput.Y * lookSensitivity * 10
-			local cf = camera.CFrame
-			local rot = CFrame.Angles(0, yaw, 0) * CFrame.Angles(pitch, 0, 0)
-			camera.CFrame = cf * rot
-		end
-
-		-- Mover câmera com o joystick de movimento (baseado na direção da câmera)
+		-- Movimento baseado no analógico
 		local moveDir = Vector3.zero
 		if movInput ~= Vector2.zero then
 			local camCF = camera.CFrame
 			local forward = camCF.LookVector
 			local right = camCF.RightVector
+			-- movInput.Y positivo = frente (cima no analógico)
 			moveDir = (forward * -movInput.Y) + (right * movInput.X)
 		end
-		-- Ascend/Descend
+		-- Vertical
 		local vertical = Vector3.zero
 		if ascendendo then vertical = Vector3.new(0, 1, 0) end
 		if descendendo then vertical = vertical + Vector3.new(0, -1, 0) end
 
-		-- Aplica movimento
 		local totalMove = (moveDir * moveSpeed + vertical * ascendSpeed) * deltaTime
 		camera.CFrame = camera.CFrame + totalMove
 	end)
@@ -378,7 +350,3 @@ btnFreecam.Name = "FreecamBtn"
 
 -- Ajustar tamanho inicial do feed
 feed.CanvasSize = UDim2.new(0,0,0,feedLayout.AbsoluteContentSize.Y + 10)
-
--- ========== ARRASTAR QUANDO NÃO MINIMIZADO (opcional, caso queira mover o menu aberto) ==========
--- Aqui deixamos o menu fixo quando aberto. Se quiser mover também, basta ativar Draggable.
--- mainFrame.Draggable = true  -- descomente se desejar mover mesmo aberto

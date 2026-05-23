@@ -1,5 +1,5 @@
 -- LocalScript dentro de StarterGui
--- YTDEVS PROJECT v4 - CALIBRAÇÃO E REPARO COMPLETO MOBILE
+-- YTDEVS PROJECT v4 - ESTABILIZAÇÃO BRUTA (ESP FIXO & TOUCH ISOLADO)
 
 local UserInputService = game:GetService("UserInputService")
 local Players = game:GetService("Players")
@@ -30,7 +30,6 @@ mainFrame.BorderSizePixel = 0
 mainFrame.Active = true
 mainFrame.Parent = screenGui
 
--- Título (Barra superior)
 local titleBar = Instance.new("TextLabel")
 titleBar.Name = "TitleBar"
 titleBar.Size = UDim2.new(1, 0, 0, 35)
@@ -42,7 +41,7 @@ titleBar.TextSize = 14
 titleBar.TextXAlignment = Enum.TextXAlignment.Left
 titleBar.Parent = mainFrame
 
--- ========== NAVEGAÇÃO DE ABAS (FEED) ==========
+-- ========== NAVEGAÇÃO DE ABAS ==========
 local tabSelectionFrame = Instance.new("Frame")
 tabSelectionFrame.Size = UDim2.new(1, 0, 0, 30)
 tabSelectionFrame.Position = UDim2.new(0, 0, 0, 35)
@@ -164,7 +163,7 @@ local iconCorner = Instance.new("UICorner")
 iconCorner.CornerRadius = UDim.new(1, 0)
 iconCorner.Parent = minimizadoIcon
 
--- ========== SISTEMA ARRASTE MULTI-TOUCH MIGRADO ==========
+-- ========== SISTEMA DE ARRASTE DOS MENUS ==========
 local function aplicarArrasto(alvo, ativador)
 	ativador = ativador or alvo
 	local dragging, dragStart, startPos, dragInput
@@ -213,7 +212,7 @@ local freecamGui = nil
 local joyDragging = false
 local currentTouch = nil
 
--- ========== CONTROLES DO DRONE COMPATÍVEIS MOBILE ==========
+-- ========== ANALÓGICO DO DRONE (VETOR DE DIREÇÃO DIRETO) ==========
 local function criarFreecamControles()
 	if freecamGui then freecamGui:Destroy() end
 	freecamGui = Instance.new("ScreenGui")
@@ -259,7 +258,6 @@ local function criarFreecamControles()
 	btnDescer.Parent = freecamGui
 	Instance.new("UICorner", btnDescer).CornerRadius = UDim.new(0, 8)
 
-	-- Lógica Corrigida Nível API Touch do Analógico
 	movBase.InputBegan:Connect(function(input)
 		if input.UserInputType == Enum.UserInputType.Touch and not joyDragging then
 			joyDragging = true
@@ -275,7 +273,7 @@ local function criarFreecamControles()
 			local direcao = delta.Magnitude > 0 and delta.Unit or Vector2.zero
 
 			movThumb.Position = UDim2.new(0.5, (direcao.X * distancia) - 25, 0.5, (direcao.Y * distancia) - 25)
-			-- Correção de vetores: empurrar analógico para cima move o Drone para frente (-LookVector)
+			-- Empurrar para cima gera valor negativo em Y na tela, invertemos para ir para frente (-direcao.Y)
 			state.moveDir = Vector3.new(direcao.X, 0, -direcao.Y)
 		end
 	end)
@@ -297,13 +295,16 @@ local function criarFreecamControles()
 	btnDescer.InputEnded:Connect(function() state.verticalDir = 0 end)
 end
 
--- ========== TOQUE E ARRASTO DA CÂMERA LIVRE (360 GRAUS SEM CONFLITOS) ==========
+-- ========== CORREÇÃO GLOBO DE TOQUE DA CÂMERA (ISOLAMENTO COMPLETO) ==========
 UserInputService.TouchMoved:Connect(function(touch, gameProcessed)
-	if not state.freecam or gameProcessed then return end
-	-- Bloqueia rotação se o toque atual for o mesmo do analógico
-	if joyDragging and touch == currentTouch then return end
+	if not state.freecam then return end
+	
+	-- ZONA MORTA ANT-CONFLITO: Se o toque começou na área do analógico, o giro da câmera ignora!
+	if touch.Position.X < (camera.ViewportSize.X * 0.45) and touch.Position.Y > (camera.ViewportSize.Y * 0.45) then
+		return
+	end
 
-	local sensibilidade = 0.009
+	local sensibilidade = 0.008
 	state.yaw = state.yaw - (touch.Delta.X * sensibilidade)
 	state.pitch = state.pitch - (touch.Delta.Y * sensibilidade)
 	state.pitch = math.clamp(state.pitch, -math.rad(89), math.rad(89))
@@ -319,7 +320,6 @@ RunService.RenderStepped:Connect(function(dt)
 		local right = rotationCF.RightVector
 		local up = Vector3.new(0, 1, 0)
 
-		-- União linear de movimento multiplicada pelo deltaTime
 		local finalMove = (right * state.moveDir.X) + (forward * state.moveDir.Z) + (up * state.verticalDir)
 
 		if finalMove.Magnitude > 0 then
@@ -330,61 +330,85 @@ RunService.RenderStepped:Connect(function(dt)
 	end
 end)
 
--- ========== ENGENHARIA DE ATUALIZAÇÃO CONTÍNUA DO ESP ==========
+-- ========== ENGENHARIA DO NOVO ESP ESTÁVEL (EVENT-BASED) ==========
 local espFolder = Instance.new("Folder", screenGui)
 espFolder.Name = "ESP_Container"
 
-local function aplicarESP()
-	espFolder:ClearAllChildren()
-	if not state.esp then return end
+local function criarESP(p)
+	if p == player then return end
 
-	for _, p in pairs(Players:GetPlayers()) do
-		if p ~= player and p.Character and p.Character:FindFirstChild("HumanoidRootPart") and p.Character:FindFirstChild("Humanoid") then
-			local root = p.Character.HumanoidRootPart
-			local hum = p.Character.Humanoid
+	local function limparModelESP()
+		local antigoBox = espFolder:FindFirstChild(p.Name .. "_Box")
+		local antigoText = espFolder:FindFirstChild(p.Name .. "_Text")
+		if antigoBox then antigoBox:Destroy() end
+		if antigoText then antigoText:Destroy() end
+	end
 
-			if hum.Health > 0 then
-				-- Cria Caixa Vermelha
-				local box = Instance.new("BoxHandleAdornment")
-				box.Size = Vector3.new(4, 5.5, 1)
-				box.Color3 = Color3.fromRGB(255, 0, 50)
-				box.AlwaysOnTop = true
-				box.ZIndex = 5
-				box.Adornee = root
-				box.Transparency = 0.6
-				box.Parent = espFolder
+	local function aplicar(char)
+		limparModelESP()
+		
+		local root = char:WaitForChild("HumanoidRootPart", 5)
+		local hum = char:WaitForChild("Humanoid", 5)
+		if not root or not hum then return end
 
-				-- Cria Texto do Nome
-				local billboard = Instance.new("BillboardGui")
-				billboard.Size = UDim2.new(0, 100, 0, 30)
-				billboard.Position = UDim2.new(0, 0, 0, -3.5)
-				billboard.AlwaysOnTop = true
-				billboard.Adornee = root
-				billboard.Parent = espFolder
+		-- Cria Adornment da Caixa
+		local box = Instance.new("BoxHandleAdornment")
+		box.Name = p.Name .. "_Box"
+		box.Size = Vector3.new(4, 5.5, 1)
+		box.Color3 = Color3.fromRGB(255, 0, 50)
+		box.AlwaysOnTop = true
+		box.ZIndex = 5
+		box.Adornee = root
+		box.Transparency = 0.6
+		box.Visible = state.esp
+		box.Parent = espFolder
 
-				local label = Instance.new("TextLabel")
-				label.Size = UDim2.new(1, 0, 1, 0)
-				label.BackgroundTransparency = 1
-				label.Text = p.Name
-				label.TextColor3 = Color3.new(1, 1, 1)
-				label.Font = Enum.Font.GothamBold
-				label.TextSize = 10
-				label.Parent = billboard
-			end
+		-- Cria Tag de Texto Superior
+		local billboard = Instance.new("BillboardGui")
+		billboard.Name = p.Name .. "_Text"
+		billboard.Size = UDim2.new(0, 120, 0, 30)
+		billboard.Position = UDim2.new(0, 0, 0, -3.5)
+		billboard.AlwaysOnTop = true
+		billboard.Adornee = root
+		billboard.Visible = state.esp
+		billboard.Parent = espFolder
+
+		local label = Instance.new("TextLabel")
+		label.Size = UDim2.new(1, 0, 1, 0)
+		label.BackgroundTransparency = 1
+		label.Text = p.Name
+		label.TextColor3 = Color3.new(1, 1, 1)
+		label.Font = Enum.Font.GothamBold
+		label.TextSize = 11
+		label.Parent = billboard
+		
+		-- Esconde se o player morrer
+		hum.Died:Connect(function()
+			box.Visible = false
+			billboard.Visible = false
+		end)
+	end
+
+	if p.Character then task.spawn(aplicar, p.Character) end
+	p.CharacterAdded:Connect(function(char)
+		task.spawn(aplicar, char)
+	end)
+	p.CharacterRemoving:Connect(limparModelESP)
+end
+
+-- Acopla o listener em todos do servidor sem perdas
+for _, p in pairs(Players:GetPlayers()) do criarESP(p) end
+Players.PlayerAdded:Connect(criarESP)
+
+local function alternarVisibilidadeESP()
+	for _, obj in pairs(espFolder:GetChildren()) do
+		if obj:IsA("BoxHandleAdornment") or obj:IsA("BillboardGui") then
+			obj.Visible = state.esp
 		end
 	end
 end
 
--- Thread infinita de atualização (Verifica mapa a cada 2 segundos)
-task.spawn(function()
-	while task.wait(2) do
-		if state.esp then
-			aplicarESP()
-		end
-	end
-end)
-
--- ========== ACOPLAMENTO DAS FUNÇÕES DO HUB ==========
+-- ========== ACOPLAMENTO DAS FUNÇÕES DO FEED ==========
 
 local btnFreecam
 local function alternarFreecam()
@@ -413,12 +437,11 @@ local function alternarESP()
 	if state.esp then
 		btnESP.BackgroundColor3 = Color3.fromRGB(100, 180, 100)
 		btnESP.Text = "Desativar ESP"
-		aplicarESP()
 	else
 		btnESP.BackgroundColor3 = Color3.fromRGB(70, 70, 70)
 		btnESP.Text = "Ativar ESP"
-		espFolder:ClearAllChildren()
 	end
+	alternarVisibilidadeESP()
 end
 
 btnFreecam = criarBotaoFeed(abaPrincipal, "Freecam", alternarFreecam)

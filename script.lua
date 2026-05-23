@@ -1,5 +1,5 @@
 -- LocalScript dentro de StarterGui
--- YTDEVS PROJECT v4 - ESTABILIZAÇÃO BRUTA (ESP FIXO & TOUCH ISOLADO)
+-- YTDEVS PROJECT v4 - SISTEMA CCTV & TOUCH DEFINITIVO
 
 local UserInputService = game:GetService("UserInputService")
 local Players = game:GetService("Players")
@@ -8,7 +8,7 @@ local RunService = game:GetService("RunService")
 local player = Players.LocalPlayer
 local camera = workspace.CurrentCamera
 
--- Limpeza de segurança para não duplicar telas ao reexecutar
+-- Limpeza de segurança para reexecução
 pcall(function()
 	if player.PlayerGui:FindFirstChild("YtDevsHub") then
 		player.PlayerGui.YtDevsHub:Destroy()
@@ -65,12 +65,13 @@ local primeiraAba = true
 
 local function novaAba(nome)
 	local btnTab = Instance.new("TextButton")
-	btnTab.Size = UDim2.new(0, 120, 1, 0)
+	-- Reduzindo o tamanho para caberem 3 abas agora
+	btnTab.Size = UDim2.new(0, 80, 1, 0)
 	btnTab.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
 	btnTab.Text = nome
 	btnTab.TextColor3 = Color3.new(1, 1, 1)
 	btnTab.Font = Enum.Font.GothamBold
-	btnTab.TextSize = 12
+	btnTab.TextSize = 11
 	btnTab.Parent = tabSelectionFrame
 
 	local scroll = Instance.new("ScrollingFrame")
@@ -109,6 +110,7 @@ local function novaAba(nome)
 end
 
 local abaPrincipal = novaAba("Principal")
+local abaCameras = novaAba("Câmeras")
 local abaAjustes = novaAba("Ajustes")
 
 local function criarBotaoFeed(abaScroll, nome, callback)
@@ -173,7 +175,6 @@ local function aplicarArrasto(alvo, ativador)
 			dragging = true
 			dragStart = input.Position
 			startPos = alvo.Position
-			
 			input.Changed:Connect(function()
 				if input.UserInputState == Enum.UserInputState.End then dragging = false end
 			end)
@@ -201,6 +202,7 @@ aplicarArrasto(minimizadoIcon, minimizadoIcon)
 local state = {
 	freecam = false,
 	esp = false,
+	viewingCam = false,
 	speed = 2,
 	yaw = 0,
 	pitch = 0,
@@ -212,7 +214,11 @@ local freecamGui = nil
 local joyDragging = false
 local currentTouch = nil
 
--- ========== ANALÓGICO DO DRONE (VETOR DE DIREÇÃO DIRETO) ==========
+-- Câmeras de segurança (Armazena os CFrames)
+local cctvSlots = {nil, nil, nil, nil, nil, nil}
+local currentSlot = 1
+
+-- ========== ANALÓGICO DO DRONE (CORREÇÃO FINAL DE TOUCH) ==========
 local function criarFreecamControles()
 	if freecamGui then freecamGui:Destroy() end
 	freecamGui = Instance.new("ScreenGui")
@@ -225,6 +231,7 @@ local function criarFreecamControles()
 	movBase.Position = UDim2.new(0, 30, 1, -170)
 	movBase.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
 	movBase.BackgroundTransparency = 0.6
+	movBase.Active = true -- Importante para capturar touch nativo
 	Instance.new("UICorner", movBase).CornerRadius = UDim.new(1, 0)
 	movBase.Parent = freecamGui
 
@@ -258,8 +265,9 @@ local function criarFreecamControles()
 	btnDescer.Parent = freecamGui
 	Instance.new("UICorner", btnDescer).CornerRadius = UDim.new(0, 8)
 
+	-- Analógico isolado blindado
 	movBase.InputBegan:Connect(function(input)
-		if input.UserInputType == Enum.UserInputType.Touch and not joyDragging then
+		if (input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseButton1) and not joyDragging then
 			joyDragging = true
 			currentTouch = input
 		end
@@ -273,7 +281,6 @@ local function criarFreecamControles()
 			local direcao = delta.Magnitude > 0 and delta.Unit or Vector2.zero
 
 			movThumb.Position = UDim2.new(0.5, (direcao.X * distancia) - 25, 0.5, (direcao.Y * distancia) - 25)
-			-- Empurrar para cima gera valor negativo em Y na tela, invertemos para ir para frente (-direcao.Y)
 			state.moveDir = Vector3.new(direcao.X, 0, -direcao.Y)
 		end
 	end)
@@ -288,6 +295,7 @@ local function criarFreecamControles()
 	end
 	
 	UserInputService.InputEnded:Connect(resetAnalogico)
+	movBase.InputEnded:Connect(resetAnalogico) -- Redundância de segurança
 
 	btnSubir.InputBegan:Connect(function() state.verticalDir = 1 end)
 	btnSubir.InputEnded:Connect(function() state.verticalDir = 0 end)
@@ -295,14 +303,11 @@ local function criarFreecamControles()
 	btnDescer.InputEnded:Connect(function() state.verticalDir = 0 end)
 end
 
--- ========== CORREÇÃO GLOBO DE TOQUE DA CÂMERA (ISOLAMENTO COMPLETO) ==========
+-- ========== CONTROLE DE VISÃO DA CÂMERA LIVRE ==========
 UserInputService.TouchMoved:Connect(function(touch, gameProcessed)
 	if not state.freecam then return end
-	
-	-- ZONA MORTA ANT-CONFLITO: Se o toque começou na área do analógico, o giro da câmera ignora!
-	if touch.Position.X < (camera.ViewportSize.X * 0.45) and touch.Position.Y > (camera.ViewportSize.Y * 0.45) then
-		return
-	end
+	if gameProcessed then return end -- Se tocou em UI (Botão), não gira
+	if joyDragging and touch == currentTouch then return end -- Ignora o dedo do analógico
 
 	local sensibilidade = 0.008
 	state.yaw = state.yaw - (touch.Delta.X * sensibilidade)
@@ -315,7 +320,6 @@ RunService.RenderStepped:Connect(function(dt)
 		camera.CameraType = Enum.CameraType.Scriptable
 
 		local rotationCF = CFrame.Angles(0, state.yaw, 0) * CFrame.Angles(state.pitch, 0, 0)
-		
 		local forward = rotationCF.LookVector
 		local right = rotationCF.RightVector
 		local up = Vector3.new(0, 1, 0)
@@ -330,7 +334,7 @@ RunService.RenderStepped:Connect(function(dt)
 	end
 end)
 
--- ========== ENGENHARIA DO NOVO ESP ESTÁVEL (EVENT-BASED) ==========
+-- ========== SISTEMA ESP ==========
 local espFolder = Instance.new("Folder", screenGui)
 espFolder.Name = "ESP_Container"
 
@@ -346,12 +350,10 @@ local function criarESP(p)
 
 	local function aplicar(char)
 		limparModelESP()
-		
 		local root = char:WaitForChild("HumanoidRootPart", 5)
 		local hum = char:WaitForChild("Humanoid", 5)
 		if not root or not hum then return end
 
-		-- Cria Adornment da Caixa
 		local box = Instance.new("BoxHandleAdornment")
 		box.Name = p.Name .. "_Box"
 		box.Size = Vector3.new(4, 5.5, 1)
@@ -363,7 +365,6 @@ local function criarESP(p)
 		box.Visible = state.esp
 		box.Parent = espFolder
 
-		-- Cria Tag de Texto Superior
 		local billboard = Instance.new("BillboardGui")
 		billboard.Name = p.Name .. "_Text"
 		billboard.Size = UDim2.new(0, 120, 0, 30)
@@ -382,7 +383,6 @@ local function criarESP(p)
 		label.TextSize = 11
 		label.Parent = billboard
 		
-		-- Esconde se o player morrer
 		hum.Died:Connect(function()
 			box.Visible = false
 			billboard.Visible = false
@@ -390,13 +390,10 @@ local function criarESP(p)
 	end
 
 	if p.Character then task.spawn(aplicar, p.Character) end
-	p.CharacterAdded:Connect(function(char)
-		task.spawn(aplicar, char)
-	end)
+	p.CharacterAdded:Connect(function(char) task.spawn(aplicar, char) end)
 	p.CharacterRemoving:Connect(limparModelESP)
 end
 
--- Acopla o listener em todos do servidor sem perdas
 for _, p in pairs(Players:GetPlayers()) do criarESP(p) end
 Players.PlayerAdded:Connect(criarESP)
 
@@ -408,10 +405,23 @@ local function alternarVisibilidadeESP()
 	end
 end
 
--- ========== ACOPLAMENTO DAS FUNÇÕES DO FEED ==========
+-- ========== ACOPLAMENTO ABA PRINCIPAL ==========
 
 local btnFreecam
+local function desligarFreecam()
+	state.freecam = false
+	btnFreecam.BackgroundColor3 = Color3.fromRGB(70, 70, 70)
+	btnFreecam.Text = "Freecam"
+	if freecamGui then freecamGui:Destroy(); freecamGui = nil end
+	joyDragging = false
+	currentTouch = nil
+	state.moveDir = Vector3.zero
+	state.verticalDir = 0
+end
+
 local function alternarFreecam()
+	if state.viewingCam then return end -- Evita conflito se estiver nas câmeras
+	
 	state.freecam = not state.freecam
 	if state.freecam then
 		btnFreecam.BackgroundColor3 = Color3.fromRGB(100, 180, 100)
@@ -420,14 +430,8 @@ local function alternarFreecam()
 		state.yaw, state.pitch = y, x
 		criarFreecamControles()
 	else
-		btnFreecam.BackgroundColor3 = Color3.fromRGB(70, 70, 70)
-		btnFreecam.Text = "Freecam"
+		desligarFreecam()
 		camera.CameraType = Enum.CameraType.Custom
-		if freecamGui then freecamGui:Destroy(); freecamGui = nil end
-		joyDragging = false
-		currentTouch = nil
-		state.moveDir = Vector3.zero
-		state.verticalDir = 0
 	end
 end
 
@@ -447,7 +451,37 @@ end
 btnFreecam = criarBotaoFeed(abaPrincipal, "Freecam", alternarFreecam)
 btnESP = criarBotaoFeed(abaPrincipal, "Ativar ESP", alternarESP)
 
--- Opções na aba de Ajustes
+-- ========== ACOPLAMENTO ABA CÂMERAS (CCTV) ==========
+
+local btnSlot = criarBotaoFeed(abaCameras, "Slot Selecionado: 1", nil)
+btnSlot.MouseButton1Click:Connect(function()
+	currentSlot = currentSlot + 1
+	if currentSlot > 6 then currentSlot = 1 end
+	btnSlot.Text = "Slot Selecionado: " .. currentSlot
+end)
+
+criarBotaoFeed(abaCameras, "Gravar Posição (Salvar)", function()
+	cctvSlots[currentSlot] = camera.CFrame
+end)
+
+local btnViewCam = criarBotaoFeed(abaCameras, "Acessar Câmera", nil)
+btnViewCam.MouseButton1Click:Connect(function()
+	if cctvSlots[currentSlot] then
+		if state.freecam then desligarFreecam() end
+		state.viewingCam = true
+		camera.CameraType = Enum.CameraType.Scriptable
+		camera.CFrame = cctvSlots[currentSlot]
+	end
+end)
+
+criarBotaoFeed(abaCameras, "Sair das Câmeras", function()
+	if state.viewingCam then
+		state.viewingCam = false
+		camera.CameraType = Enum.CameraType.Custom
+	end
+end)
+
+-- ========== ABA DE AJUSTES ==========
 criarBotaoFeed(abaAjustes, "Velocidade Drone: +", function()
 	state.speed = math.clamp(state.speed + 0.5, 0.5, 6)
 end)
@@ -470,6 +504,7 @@ end)
 btnFechar.MouseButton1Click:Connect(function()
 	state.freecam = false
 	state.esp = false
+	state.viewingCam = false
 	espFolder:ClearAllChildren()
 	camera.CameraType = Enum.CameraType.Custom
 	if freecamGui then freecamGui:Destroy() end

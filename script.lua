@@ -1,6 +1,6 @@
 --[[
-    KRONOS PREMIUM HUB - REVISED EDITION (PART 1)
-    INTRODUÇÃO RESTAURADA, NÚCLEO E PERFIL
+    KRONOS PREMIUM HUB - UNIFIED & FIXED EDITION
+    REPOSITÓRIO: AkiroDevs/Anime
 ]]
 
 local TweenService = game:GetService("TweenService")
@@ -29,7 +29,9 @@ gui.Name = "KronosInterfaceCore"
 gui.Parent = targetGui
 gui.ResetOnSpawn = false
 
--- INTRODUÇÃO CORRIGIDA E ADICIONADA
+-- ==========================================
+-- INTRODUÇÃO (BLINDADA)
+-- ==========================================
 local introFrame = Instance.new("Frame", gui)
 introFrame.Size = UDim2.new(1, 0, 1, 0)
 introFrame.BackgroundColor3 = Color3.fromRGB(10, 8, 7)
@@ -45,6 +47,9 @@ introText.TextColor3 = COLORS.Accent
 introText.TextTransparency = 1
 introText.ZIndex = 1001
 
+-- ==========================================
+-- PAINEL PRINCIPAL
+-- ==========================================
 local main = Instance.new("Frame", gui)
 main.Name = "MainFrame"
 main.Size = UDim2.new(0, 560, 0, 360)
@@ -66,6 +71,7 @@ shortcutIcon.TextSize = 18
 shortcutIcon.Visible = false
 Instance.new("UICorner", shortcutIcon).CornerRadius = UDim.new(0, 8)
 
+-- CONTROLE DE EXIBIÇÃO DA INTRO
 task.spawn(function()
     task.wait(0.2)
     TweenService:Create(introText, TweenInfo.new(0.6, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {TextTransparency = 0}):Play()
@@ -80,6 +86,9 @@ task.spawn(function()
     introFrame:Destroy()
 end)
 
+-- ==========================================
+-- ESTRUTURA LATERAL & PERFIL
+-- ==========================================
 local sidebar = Instance.new("Frame", main)
 sidebar.Size = UDim2.new(0, 165, 1, 0)
 sidebar.BackgroundColor3 = COLORS.sidebar
@@ -186,11 +195,11 @@ local pCombat    = registrarCategoria("Combat")
 local pESP       = registrarCategoria("ESP")
 local pVisual    = registrarCategoria("Visual")
 local pTrolling  = registrarCategoria("Trolling")
-local pOther     = registrarCategoria("Other")--[[
-    KRONOS PREMIUM HUB - REVISED EDITION (PART 2)
-    FÁBRICA DE COMPONENTES DE COMPATIBILIDADE MÁXIMA
-]]
+local pOther     = registrarCategoria("Other")
 
+-- ==========================================
+-- FÁBRICA DE COMPONENTES INTERNOS
+-- ==========================================
 local function criarToggle(aba, titulo, padrao, callback)
     local card = Instance.new("Frame", aba)
     card.Size = UDim2.new(0.96, 0, 0, 45)
@@ -306,18 +315,17 @@ local function criarBotao(aba, titulo, callback)
     Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 6)
     btn.MouseButton1Click:Connect(callback)
     return btn
-end--[[
-    KRONOS PREMIUM HUB - REVISED EDITION (PART 3)
-    FÍSICA CORRIGIDA E INJEÇÃO AUTOMÁTICA DO FLY SCRIPT EXTERNO
-]]
+end
 
+-- ==========================================
+-- ABA: CHARACTER (FÍSICA & FLY AUTOMÁTICO)
+-- ==========================================
 local VARS = { Speed = 16, Jump = 50, Spider = false, Noclip = false, InfJump = false }
 
 UserInputService.JumpRequest:Connect(function()
     local char = player.Character
     local hum = char and char:FindFirstChildOfClass("Humanoid")
     local root = char and char:FindFirstChild("HumanoidRootPart")
-    
     if hum and root then
         if VARS.InfJump then
             hum:ChangeState(Enum.HumanoidStateType.Jumping)
@@ -328,11 +336,10 @@ UserInputService.JumpRequest:Connect(function()
     end
 end)
 
-RunService.PostSimulation:Connect(function()
+RunService.Heartbeat:Connect(function()
     local char = player.Character
     local hum = char and char:FindFirstChildOfClass("Humanoid")
     local root = char and char:FindFirstChild("HumanoidRootPart")
-    
     if hum and root then
         if VARS.Speed > 16 and hum.MoveDirection.Magnitude > 0 then
             root.AssemblyLinearVelocity = Vector3.new(hum.MoveDirection.X * VARS.Speed, root.AssemblyLinearVelocity.Y, hum.MoveDirection.Z * VARS.Speed)
@@ -355,8 +362,8 @@ criarSlider(pCharacter, "JumpPower", 50, 200, 50, function(v) VARS.Jump = v end)
 criarToggle(pCharacter, "Infinite Jump", false, function(v) VARS.InfJump = v end)
 criarToggle(pCharacter, "Spider Mode", false, function(v) VARS.Spider = v end)
 
--- MÓDULO FLY ATUALIZADO: Executa automaticamente a loadstring requisitada!
-criarBotao(pCharacter, "🚀 Executar Fly (FlyGuiV3 Automatizado)", function()
+-- BOTÃO FLY DO USUÁRIO INTEGRADO
+criarBotao(pCharacter, "🚀 Executar Fly (FlyGuiV3)", function()
     task.spawn(function()
         loadstring(game:HttpGet("https://raw.githubusercontent.com/XNEOFF/FlyGuiV3/main/FlyGuiV3.txt"))()
     end)
@@ -375,6 +382,9 @@ criarToggle(pCharacter, "Noclip", false, function(estado)
     else RunService:UnbindFromRenderStep("NoclipK") end
 end)
 
+-- ==========================================
+-- ABA: TELEPORT
+-- ==========================================
 local function addTP(nome, cf)
     criarBotao(pTeleport, "✈️ " .. nome, function()
         local root = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
@@ -383,12 +393,11 @@ local function addTP(nome, cf)
 end
 addTP("Banco (Cofre)", CFrame.new(-1.39, 17.75, 254.11))
 addTP("Praça Central", CFrame.new(-54.05, 3.30, 18.26))
-addTP("Placa da Montanha", CFrame.new(-248.25, 88.50, -553.43))--[[
-    KRONOS PREMIUM HUB - REVISED EDITION (PART 4)
-    SPECTATE COM LISTA DE JOGADORES ATIVOS E ELEMENTOS VISUAIS
-]]
+addTP("Placa da Montanha", CFrame.new(-248.25, 88.50, -553.43))
 
--- LISTAGEM DINÂMICA DE JOGADORES PARA SPECTATE
+-- ==========================================
+-- ABA: VISUAL (LISTA SPECTATE REAL & CÂMERAS)
+-- ==========================================
 local specContainer = Instance.new("Frame", pVisual)
 specContainer.Size = UDim2.new(0.96, 0, 0, 130)
 specContainer.BackgroundColor3 = Color3.fromRGB(24, 18, 14)
@@ -410,7 +419,6 @@ specScroll.Position = UDim2.new(0, 8, 0, 27)
 specScroll.BackgroundTransparency = 1
 specScroll.ScrollBarThickness = 3
 specScroll.ScrollBarImageColor3 = COLORS.Accent
-
 local specLayout = Instance.new("UIListLayout", specScroll)
 specLayout.Padding = UDim.new(0, 4)
 
@@ -468,7 +476,9 @@ end)
 
 criarSlider(pVisual, "Field of View (FOV)", 70, 120, 70, function(v) workspace.CurrentCamera.FieldOfView = v end)
 
--- ESP E COMBAT MANTIDOS
+-- ==========================================
+-- ABAS ADICIONAIS (ESP, COMBAT, TROLLING, OTHER)
+-- ==========================================
 local espAtivo = false
 criarToggle(pESP, "Player ESP (Highlight)", false, function(estado)
     espAtivo = estado
@@ -503,11 +513,28 @@ criarSlider(pCombat, "Expandir Hitbox", 2, 20, 2, function(v)
         end
         task.wait(1)
     end
-end)-- [[
-    KRONOS PREMIUM HUB - REVISED EDITION (PART 5)
-    CONTROLES VISUAIS COMPLETOS E INTERFACE DE FIXAÇÃO
-]]
+end)
 
+local spinAtivo = false
+criarToggle(pTrolling, "Spin Bot", false, function(estado)
+    spinAtivo = estado
+    if estado then
+        RunService:BindToRenderStep("KronosSpin", 1, function()
+            local root = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
+            if root then root.CFrame = root.CFrame * CFrame.Angles(0, math.rad(50), 0) end
+        end)
+    else RunService:UnbindFromRenderStep("KronosSpin") end
+end)
+
+criarBotao(pOther, "🛠️ Dar BTools (Local)", function()
+    Instance.new("HopperBin", player.Backpack).BinType = Enum.BinType.Clone
+    Instance.new("HopperBin", player.Backpack).BinType = Enum.BinType.Hammer
+    Instance.new("HopperBin", player.Backpack).BinType = Enum.BinType.Grab
+end)
+
+-- ==========================================
+-- CONTROLES DE JANELA & CONEXÃO DE ARRASTO
+-- ==========================================
 local windowControls = Instance.new("Frame", main)
 windowControls.Size = UDim2.new(0, 100, 0, 30)
 windowControls.Position = UDim2.new(1, -110, 0, 10)
@@ -528,7 +555,6 @@ local function criarTopBtn(simb, size, acao)
     b.MouseButton1Click:Connect(acao)
 end
 
--- CONTROLES RESTAURADOS COMPLETAMENTE
 criarTopBtn("—", 13, function() main.Visible = false shortcutIcon.Visible = true end)
 
 local estadoExpandido = false
@@ -566,7 +592,7 @@ end
 vincularArrasto(main)
 vincularArrasto(shortcutIcon)
 
--- Inicialização
+-- Estado Inicial Padrão
 abasAtivas["Character"].Page.Visible = true
 abasAtivas["Character"].Button.TextColor3 = COLORS.Text
 abasAtivas["Character"].Button.BackgroundColor3 = COLORS.Card
